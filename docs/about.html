@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>About — hermes-browser-bridge</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: #0d1117;
+    color: #c9d1d9;
+    line-height: 1.6;
+  }
+  a { color: #58a6ff; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .container { max-width: 960px; margin: 0 auto; padding: 0 24px; }
+  header {
+    border-bottom: 1px solid #30363d;
+    padding: 32px 0;
+  }
+  header .container { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+  .brand { font-weight: 700; font-size: 1.25rem; color: #f0f6fc; }
+  nav a { margin-left: 20px; font-size: 0.95rem; }
+  section { padding: 60px 0; }
+  h1 { font-size: 2rem; margin: 0 0 16px; color: #f0f6fc; }
+  h2 { font-size: 1.35rem; margin: 32px 0 10px; color: #f0f6fc; }
+  p { max-width: 720px; margin: 0 0 14px; }
+  ul { padding-left: 20px; margin: 0 0 14px; }
+  li { margin-bottom: 6px; }
+  .card {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 12px;
+    padding: 24px;
+    margin: 18px 0;
+  }
+  .card h3 { margin: 0 0 8px; font-size: 1.05rem; color: #f0f6fc; }
+  .card p { margin: 0; }
+  footer { text-align: center; padding: 40px 0 60px; color: #8b949e; font-size: 0.9rem; border-top: 1px solid #21262d; }
+  .tag { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 0.78rem; font-weight: 600; background: #21262d; color: #c9d1d9; border: 1px solid #30363d; margin-right: 6px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="container">
+    <div class="brand">hermes-browser-bridge</div>
+    <nav>
+      <a href="index.html">Home</a>
+      <a href="install.html">Install</a>
+      <a href="about.html">About</a>
+      <a href="https://github.com/jlaiii/hermes-browser-bridge">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<section>
+  <div class="container">
+    <h1>About</h1>
+    <p>
+      <strong>hermes-browser-bridge</strong> is a lightweight, CSP-safe browser automation tool built
+      for the <strong>Hermes Agent</strong> ecosystem. It lets you remotely control live browser tabs
+      via a local relay server, using Tampermonkey's privileged <code>GM_xmlhttpRequest</code> to
+      bypass strict Content-Security-Policy rules on sites like GitHub, LinkedIn, ChatGPT, and eBay.
+    </p>
+
+    <h2>Who Built It</h2>
+    <p>
+      Built by <a href="https://github.com/jlaiii">jlaiii</a> for the Hermes Agent project — an AI-powered
+      CLI automation environment running inside WSL.
+    </p>
+
+    <h2>Why It Exists</h2>
+    <p>
+      Traditional browser automation tools (WebSocket injections, Puppeteer, Playwright) fail on
+      heavily CSP-protected sites. This bridge uses HTTP short-polling, so it works everywhere
+      Tampermonkey does.
+    </p>
+
+    <div class="card">
+      <h3>Live Site</h3>
+      <p><a href="https://jlaiii.github.io/hermes-browser-bridge/">https://jlaiii.github.io/hermes-browser-bridge/</a></p>
+    </div>
+
+    <div class="card">
+      <h3>Repository</h3>
+      <p><a href="https://github.com/jlaiii/hermes-browser-bridge">github.com/jlaiii/hermes-browser-bridge</a></p>
+    </div>
+
+    <h2>Stack</h2>
+    <p>
+      <span class="tag">Python</span>
+      <span class="tag">aiohttp</span>
+      <span class="tag">Tampermonkey</span>
+      <span class="tag">GM_xmlhttpRequest</span>
+      <span class="tag">GitHub Pages</span>
+    </p>
+
+    <h2>License</h2>
+    <p>MIT — see <a href="https://github.com/jlaiii/hermes-browser-bridge/blob/master/LICENSE">LICENSE</a>.</p>
+  </div>
+</section>
+
+<footer>
+  <div class="container">
+    <p>hermes-browser-bridge — <a href="https://jlaiii.github.io/hermes-browser-bridge/">Live Site</a> — <a href="https://github.com/jlaiii/hermes-browser-bridge">GitHub</a></p>
+  </div>
+</footer>
+
+</body>
+</html>
