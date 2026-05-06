@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>hermes-browser-bridge</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: #0d1117;
+    color: #c9d1d9;
+    line-height: 1.6;
+  }
+  a { color: #58a6ff; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code, pre {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    font-size: 0.95em;
+  }
+  .container { max-width: 960px; margin: 0 auto; padding: 0 24px; }
+  header {
+    border-bottom: 1px solid #30363d;
+    padding: 32px 0;
+  }
+  header .container { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+  .brand { font-weight: 700; font-size: 1.25rem; color: #f0f6fc; }
+  nav a { margin-left: 20px; font-size: 0.95rem; }
+  .hero {
+    padding: 80px 0 60px;
+    text-align: center;
+  }
+  .hero h1 {
+    font-size: clamp(2rem, 5vw, 3rem);
+    margin: 0 0 16px;
+    color: #f0f6fc;
+    letter-spacing: -0.02em;
+  }
+  .hero p.lead {
+    font-size: clamp(1rem, 2.6vw, 1.25rem);
+    max-width: 700px;
+    margin: 0 auto 32px;
+    color: #8b949e;
+  }
+  .btn {
+    display: inline-block;
+    padding: 12px 24px;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 0.95rem;
+    transition: transform .15s ease, box-shadow .2s ease;
+  }
+  .btn-primary { background: #58a6ff; color: #0d1117; }
+  .btn-secondary { background: #21262d; color: #c9d1d9; border: 1px solid #30363d; }
+  .btn:hover { transform: translateY(-1px); text-decoration: none; }
+  section { padding: 60px 0; }
+  section + section { border-top: 1px solid #21262d; }
+  h2 { font-size: 1.75rem; margin: 0 0 18px; color: #f0f6fc; }
+  .features { display: grid; grid-template-columns: repeat(auto-fit,minmax(260px,1fr)); gap: 20px; }
+  .feature {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 12px;
+    padding: 24px;
+  }
+  .feature h3 { margin: 0 0 10px; font-size: 1.1rem; color: #f0f6fc; }
+  .feature p { margin: 0; color: #8b949e; }
+  .install-steps { background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 24px; }
+  .install-steps ol { padding-left: 20px; margin: 0; }
+  .install-steps li { margin-bottom: 14px; }
+  .install-steps code {
+    background: #0d1117;
+    border: 1px solid #30363d;
+    padding: 2px 6px;
+    border-radius: 6px;
+    color: #58a6ff;
+  }
+  .arch-diagram {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 12px;
+    padding: 24px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    color: #8b949e;
+    overflow-x: auto;
+    white-space: pre;
+    line-height: 1.5;
+  }
+  .arch-diagram span { color: #f0f6fc; }
+  .arch-diagram .accent { color: #58a6ff; }
+  table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid #21262d; }
+  th { color: #f0f6fc; font-weight: 600; }
+  td code { background: #0d1117; border: 1px solid #30363d; padding: 2px 6px; border-radius: 6px; color: #58a6ff; }
+  footer { text-align: center; padding: 40px 0 60px; color: #8b949e; font-size: 0.9rem; }
+  .badge { display: inline-block; padding: 4px 10px; border-radius: 999px; font-size: 0.8rem; font-weight: 600; background: #238636; color: #fff; margin-right: 6px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="container">
+    <div class="brand">hermes-browser-bridge</div>
+    <nav>
+      <a href="index.html">Home</a>
+      <a href="install.html">Install</a>
+      <a href="https://github.com/jlaiii/hermes-browser-bridge">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<section class="hero">
+  <div class="container">
+    <h1>Automate the browser without breaking CSP</h1>
+    <p class="lead">
+      A lightweight, CSP-safe browser automation bridge. Use HTTP short-polling via Tampermonkey's <code>GM_xmlhttpRequest</code> and a localhost relay to control pages like ChatGPT, GitHub, LinkedIn, and eBay.
+    </p>
+    <a class="btn btn-primary" href="install.html">Get Started</a>
+    <a class="btn btn-secondary" href="https://github.com/jlaiii/hermes-browser-bridge">View on GitHub</a>
+  </div>
+</section>
+
+<section id="features">
+  <div class="container">
+    <h2>Features</h2>
+    <div class="features">
+      <div class="feature">
+        <h3>CSP-Safe</h3>
+        <p>Works inside strict Content-Security-Policy environments where traditional injection fails.</p>
+      </div>
+      <div class="feature">
+        <h3>Tampermonkey Native</h3>
+        <p>Leverages <code>GM_xmlhttpRequest</code> for reliable cross-origin outbound requests.</p>
+      </div>
+      <div class="feature">
+        <h3>Localhost Relay</h3>
+        <p>A tiny local relay server bridges your automation scripts to the browser.</p>
+      </div>
+      <div class="feature">
+        <h3>Site Agnostic</h3>
+        <p>Supports ChatGPT, GitHub, LinkedIn, eBay, and any other site with a Tampermonkey context.</p>
+      </div>
+      <div class="feature">
+        <h3>Short-Polling</h3>
+        <p>Simple HTTP short-polling design; no WebSockets, no extra ports, no headaches.</p>
+      </div>
+      <div class="feature">
+        <h3>Zero External Deps</h3>
+        <p>The userscript and relay are self-contained with no third-party dependencies.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="install">
+  <div class="container">
+    <h2>Quick Install</h2>
+    <div class="install-steps">
+      <ol>
+        <li><strong>Install the relay</strong> — clone the repo and start the relay server:<br><code>git clone https://github.com/jlaiii/hermes-browser-bridge.git<br>cd hermes-browser-bridge && python relay.py</code></li>
+        <li><strong>Install the userscript</strong> — copy the script into Tampermonkey (or Greasemonkey). It runs on target sites and polls <code>http://localhost:8080</code> by default.</li>
+        <li><strong>Automate</strong> — send commands to the relay via HTTP; the userscript executes them in the browser and returns results.</li>
+      </ol>
+    </div>
+    <p style="margin-top: 16px;">See the <a href="install.html">full install guide</a> for platform-specific copy-paste commands.</p>
+  </div>
+</section>
+
+<section id="architecture">
+  <div class="container">
+    <h2>Architecture</h2>
+    <div class="arch-diagram">
+  +---------------------+        HTTP POST/GET        +---------------------+
+  |   Your automation   | &lt;------------------------&gt; |   <span class="accent">localhost relay</span>   |
+  |   script / CLI      |                            |   (e.g. port 8080)   |
+  +---------------------+                            +----------+----------+
+                                                             |
+                                                             | fetch
+                                                             |
+                                                    +--------v---------+
+                                                    |  <span>Target page</span>    |
+                                                    |  (Tampermonkey)  |
+                                                    |  <span class="accent">GM_xmlhttpRequest</span> |
+                                                    +--------+---------+
+                                                             |
+                                                    +--------v---------+
+                                                    |   <span>Browser DOM</span>   |
+                                                    |  Click / Type /  |
+                                                    |  Read / Navigate   |
+                                                    +------------------+
+    </div>
+  </div>
+</section>
+
+<section id="commands">
+  <div class="container">
+    <h2>Command Reference</h2>
+    <p>Send these JSON payloads to the relay. All responses are returned via the short-poll loop.</p>
+    <table>
+      <thead>
+        <tr><th>Command</th><th>Payload</th><th>Description</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>click</code></td><td><code>{"cmd":"click","selector":"#btn"}</code></td><td>Click a DOM element.</td></tr>
+        <tr><td><code>type</code></td><td><code>{"cmd":"type","selector":"#input","text":"hello"}</code></td><td>Type text into an input.</td></tr>
+        <tr><td><code>read</code></td><td><code>{"cmd":"read","selector":".content"}</code></td><td>Read innerText from an element.</td></tr>
+        <tr><td><code>navigate</code></td><td><code>{"cmd":"navigate","url":"/page"}</code></td><td>Change <code>window.location</code>.</td></tr>
+        <tr><td><code>eval</code></td><td><code>{"cmd":"eval","js":"document.title"}</code></td><td>Run arbitrary JS in page context.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<footer>
+  <div class="container">
+    <p>
+      <span class="badge">Open Source</span>
+      <a href="https://github.com/jlaiii/hermes-browser-bridge">github.com/jlaiii/hermes-browser-bridge</a>
+    </p>
+  </div>
+</footer>
+
+</body>
+</html>

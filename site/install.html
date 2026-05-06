@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Install — hermes-browser-bridge</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: #0d1117;
+    color: #c9d1d9;
+    line-height: 1.6;
+  }
+  a { color: #58a6ff; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code, pre {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    font-size: 0.95em;
+  }
+  .container { max-width: 960px; margin: 0 auto; padding: 0 24px; }
+  header {
+    border-bottom: 1px solid #30363d;
+    padding: 32px 0;
+  }
+  header .container { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+  .brand { font-weight: 700; font-size: 1.25rem; color: #f0f6fc; }
+  nav a { margin-left: 20px; font-size: 0.95rem; }
+  h1 { font-size: clamp(1.6rem, 4vw, 2.2rem); margin: 0 0 8px; color: #f0f6fc; }
+  .subtitle { color: #8b949e; margin-bottom: 32px; }
+  section { padding: 40px 0; }
+  section + section { border-top: 1px solid #21262d; }
+  h2 { font-size: 1.35rem; margin: 0 0 14px; color: #f0f6fc; }
+  .step { background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 24px; margin-bottom: 20px; }
+  .step h3 { margin: 0 0 10px; font-size: 1.05rem; color: #f0f6fc; }
+  .step p { margin: 0 0 14px; color: #8b949e; }
+  .snip {
+    background: #0d1117;
+    border: 1px solid #30363d;
+    border-radius: 10px;
+    padding: 16px 20px;
+    overflow-x: auto;
+    white-space: pre;
+    line-height: 1.55;
+    color: #c9d1d9;
+  }
+  .snip code { font-size: 0.92em; color: #a5d6ff; }
+  .tabs { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+  .tab {
+    padding: 6px 14px;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    background: #21262d;
+    border: 1px solid #30363d;
+    color: #c9d1d9;
+    user-select: none;
+  }
+  .tab.active { background: #58a6ff; color: #0d1117; border-color: #58a6ff; }
+  .platform-block { display: none; }
+  .platform-block.active { display: block; }
+  .btn {
+    display: inline-block;
+    padding: 10px 20px;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 0.95rem;
+    transition: transform .15s ease, box-shadow .2s ease;
+  }
+  .btn-primary { background: #58a6ff; color: #0d1117; }
+  .btn-secondary { background: #21262d; color: #c9d1d9; border: 1px solid #30363d; }
+  .btn:hover { transform: translateY(-1px); text-decoration: none; }
+  footer { text-align: center; padding: 40px 0 60px; color: #8b949e; font-size: 0.9rem; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="container">
+    <div class="brand">hermes-browser-bridge</div>
+    <nav>
+      <a href="index.html">Home</a>
+      <a href="install.html">Install</a>
+      <a href="https://github.com/jlaiii/hermes-browser-bridge">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<div class="container">
+  <section>
+    <h1>Install hermes-browser-bridge</h1>
+    <p class="subtitle">Two parts: the userscript (browser) and the relay (localhost). Pick your OS below for exact copy-paste commands.</p>
+
+    <div class="step">
+      <h3>1. Clone the repository</h3>
+      <p>All platforms use the same repo:</p>
+      <div class="snip"><code>git clone https://github.com/jlaiii/hermes-browser-bridge.git<br>cd hermes-browser-bridge</code></div>
+    </div>
+
+    <div class="step">
+      <h3>2. Start the relay</h3>
+      <p>Choose your platform to see the right command.</p>
+      <div class="tabs">
+        <span class="tab active" data-target="linux">Linux</span>
+        <span class="tab" data-target="mac">macOS</span>
+        <span class="tab" data-target="win">Windows</span>
+      </div>
+      <div id="linux" class="platform-block active">
+        <div class="snip"><code># Ensure Python 3 is installed, then start the relay<br>python3 relay.py</code></div>
+      </div>
+      <div id="mac" class="platform-block">
+        <div class="snip"><code># macOS ships with Python 3 since Catalina; start directly<br>python3 relay.py</code></div>
+      </div>
+      <div id="win" class="platform-block">
+        <div class="snip"><code># In Command Prompt or PowerShell, run the relay<br>python relay.py</code></div>
+      </div>
+    </div>
+
+    <div class="step">
+      <h3>3. Install the Tampermonkey userscript</h3>
+      <p>The userscript polls the relay and executes commands in the browser.</p>
+      <ol>
+        <li>Install <a href="https://www.tampermonkey.net/">Tampermonkey</a> for your browser.</li>
+        <li>Open Tampermonkey Dashboard → Utilities → Import from file.</li>
+        <li>Select <code>hermes-browser-bridge.user.js</code> (inside the cloned repo).</li>
+        <li>Save and enable the script for the sites you want to automate.</li>
+      </ol>
+      <p style="margin-top:10px;">Alternatively, create a new script and paste the contents of <code>hermes-browser-bridge.user.js</code> directly.</p>
+    </div>
+
+    <div class="step">
+      <h3>4. Verify it works</h3>
+      <p>Send a test ping and read the page title:</p>
+      <div class="snip"><code>curl -X POST http://localhost:8080/api/command \<br>  -H "Content-Type: application/json" \<br>  -d '{"cmd":"eval","js":"document.title"}'</code></div>
+      <p>You should see the current page title returned in JSON.</p>
+    </div>
+
+    <div style="text-align:center; margin-top: 24px;">
+      <a class="btn btn-secondary" href="index.html">&larr; Back to home</a>
+      <a class="btn btn-primary" href="https://github.com/jlaiii/hermes-browser-bridge">Open GitHub Repo</a>
+    </div>
+  </section>
+</div>
+
+<footer>
+  <div class="container">
+    <p>hermes-browser-bridge — <a href="https://github.com/jlaiii/hermes-browser-bridge">GitHub</a></p>
+  </div>
+</footer>
+
+<script>
+  document.querySelectorAll('.tab').forEach(function(tab){
+    tab.addEventListener('click', function(){
+      var target = this.getAttribute('data-target');
+      document.querySelectorAll('.tab').forEach(function(t){ t.classList.remove('active'); });
+      document.querySelectorAll('.platform-block').forEach(function(b){ b.classList.remove('active'); });
+      this.classList.add('active');
+      document.getElementById(target).classList.add('active');
+    });
+  });
+</script>
+
+</body>
+</html>
