@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Hermes Browser Bridge (CSP-safe)
 // @namespace    http://hermes-agent.local/
-// @version      1.6.1
-// @description  CSP-safe remote control for any browser tab. HTTP short-polling bridge that bypasses CSP. v1.6.1: auto-save working IP, preserve clientId across reloads, fix reconnection storms.
+// @version      1.6.2
+// @description  CSP-safe remote control for any browser tab. HTTP short-polling bridge that bypasses CSP. v1.6.2: stable clientId, fix GET data:null bug, smarter rediscovery.
 // @author       Hermes Agent
 // @match        *://*/*
 // @grant        GM_xmlhttpRequest
@@ -26,7 +26,7 @@
     const POLL_TIMEOUT_MS = 30000;
     const RECONNECT_MS = 3000;
     const MAX_CONSECUTIVE_ERRORS = 5;
-    const TAB_ID = 'hermes_tab_' + Math.random().toString(36).slice(2, 8);
+    const TAB_ID = 'hermes_tab_' + (location.origin || 'default').replace(/[^a-z0-9]/gi, '_');
 
     let API_BASE = null;
     let clientId = (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('hermes_client_id_' + TAB_ID)) || null;
@@ -135,7 +135,6 @@
             method: method,
             url: url,
             headers: data ? {"Content-Type": "application/json"} : {},
-            data: data ? JSON.stringify(data) : null,
             timeout: timeoutMs || BOOT_TIMEOUT_MS,
             onload: function(resp) {
                 if (onload) onload(resp);
@@ -152,6 +151,7 @@
                 if (onerror) onerror(resp);
             }
         };
+        if (data) opts.data = JSON.stringify(data);
         gmXHR(opts);
     }
 
@@ -282,9 +282,12 @@
             isPolling = false;
             setTimeout(function() {
                 discoverAPI(function(base) {
-                    if (base) startPolling();
-                    else if (bootTimer) clearTimeout(bootTimer);
-                    bootTimer = setTimeout(boot, RECONNECT_MS);
+                    if (base) {
+                        startPolling();
+                    } else {
+                        if (bootTimer) clearTimeout(bootTimer);
+                        bootTimer = setTimeout(boot, RECONNECT_MS);
+                    }
                 });
             }, RECONNECT_MS);
         });
@@ -384,7 +387,7 @@
         if (!document.body) { if (bootTimer) clearTimeout(bootTimer); bootTimer = setTimeout(boot, 100); return; }
         createPanel();
         detectMetaRefresh();
-        dbg('Bridge v1.6.1 loaded on ' + location.href.slice(0,60));
+        dbg('Bridge v1.6.2 loaded on ' + location.href.slice(0,60));
         if (metaRefreshSec > 0) dbg('Meta-refresh: ' + metaRefreshSec + 's');
         setStatus('discovering...', '#fa0');
 
