@@ -1,7 +1,17 @@
 # Hermes Browser Bridge
-# Hermes Browser Bridge
 
-**[Live Site](https://jlaiii.github.io/hermes-browser-bridge/)**
+> CSP-safe remote control for any browser tab. Automate clicks, typing, navigation, and data extraction on sites that block WebSockets — GitHub, ChatGPT, LinkedIn, and more.
+
+**[🌐 Live Site](https://jlaiii.github.io/hermes-browser-bridge/)**
+
+---
+
+## Who It's For
+
+- **AI agents & automation scripts** — control browsers from Python scripts or terminal tools
+- **Web developers** — test, scrape, or automate tasks on strict CSP sites
+- **Power users** — fill forms, navigate pages, and extract data remotely
+- **Anyone who needs browser automation** when WebSockets and extensions are blocked
 
 ---
 
