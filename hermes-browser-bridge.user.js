@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Hermes Browser Bridge (CSP-safe)
 // @namespace    http://hermes-agent.local/
-// @version      1.6.0
-// @description  CSP-safe remote control for any browser tab. HTTP short-polling bridge that bypasses CSP. v1.6: auto-discovers local IPs via WebRTC, manual IP fallback UI, deduped candidates.
+// @version      1.6.1
+// @description  CSP-safe remote control for any browser tab. HTTP short-polling bridge that bypasses CSP. v1.6.1: auto-save working IP, preserve clientId across reloads, fix reconnection storms.
 // @author       Hermes Agent
 // @match        *://*/*
 // @grant        GM_xmlhttpRequest
@@ -16,20 +16,20 @@
 (function() {
     'use strict';
 
-    // --- CONFIG: Override with your relay IP if auto-detect fails ---
-    // Set in browser console: window.__HERMES_BRIDGE_API__ = 'http://YOUR_IP:8765'
-    // Or set localStorage: localStorage.setItem('hermes_bridge_api', 'http://YOUR_IP:8765')
+    // --- User overrides ---
     const USER_API = (typeof window !== 'undefined' && window.__HERMES_BRIDGE_API__)
         || (typeof localStorage !== 'undefined' && localStorage.getItem('hermes_bridge_api'))
         || null;
 
+    // --- Config ---
     const BOOT_TIMEOUT_MS = 4000;
     const POLL_TIMEOUT_MS = 30000;
-    const RECONNECT_MS = 2000;
+    const RECONNECT_MS = 3000;
     const MAX_CONSECUTIVE_ERRORS = 5;
+    const TAB_ID = 'hermes_tab_' + Math.random().toString(36).slice(2, 8);
 
     let API_BASE = null;
-    let clientId = null;
+    let clientId = (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('hermes_client_id_' + TAB_ID)) || null;
     let isPolling = false;
     let logLines = [];
     let panel = null;
@@ -37,12 +37,12 @@
     let isUnloading = false;
     let consecutiveErrors = 0;
     let metaRefreshSec = 0;
+    let bootTimer = null;
 
     const gmXHR = (typeof GM !== 'undefined' && GM.xmlHttpRequest)
                  || (typeof GM_xmlhttpRequest !== 'undefined' && GM_xmlHttpRequest)
                  || null;
 
-    // Detect pages that auto-refresh
     function detectMetaRefresh() {
         const meta = document.querySelector('meta[http-equiv="refresh"]');
         if (meta) {
@@ -75,7 +75,11 @@
             </div>
             <pre style="margin:0;padding:4px 8px;overflow-y:auto;flex:1;white-space:pre-wrap;word-break:break-word;font-size:10px;color:#aaa;"></pre>
         `;
-        document.body.appendChild(d);
+        if (document.body) document.body.appendChild(d);
+        else {
+            // body not ready yet
+            document.addEventListener('DOMContentLoaded', function(){ if (!document.getElementById('hermes-bridge-panel')) document.body.appendChild(d); });
+        }
         panel = d;
         d.querySelector('div').addEventListener('click', () => {
             const pre = d.querySelector('pre');
@@ -85,28 +89,25 @@
 
     function showManualInput(attempted) {
         if (!panel) createPanel();
-        const pre = panel.querySelector('pre');
         const existing = document.getElementById('hb-manual-input');
         if (existing) return;
         const div = document.createElement('div');
         div.id = 'hb-manual-input';
         div.style.cssText = 'padding:6px 8px;border-top:1px solid #333;';
         div.innerHTML = `
-            <div style="color:#f44;margin-bottom:4px;">Cannot find relay. Tried: ${attempted.join(', ')}</div>
+            <div style="color:#f44;margin-bottom:4px;">Cannot find relay. Tried: ${attempted.slice(0,3).join(', ')}${attempted.length>3?'...':''}</div>
             <div style="display:flex;gap:4px;">
                 <input id="hb-ip" placeholder="http://IP:8765" style="flex:1;padding:4px;border-radius:3px;border:1px solid #555;background:#222;color:#0f0;font-family:monospace;">
                 <button id="hb-set" style="padding:4px 8px;background:#0a0;color:#fff;border:none;border-radius:3px;cursor:pointer;">Connect</button>
             </div>
-            <div style="margin-top:4px;color:#888;font-size:9px;">Run 'ip addr' in WSL to find your LAN IP. Or enable mirrored networking in .wslconfig.</div>
         `;
         panel.appendChild(div);
         document.getElementById('hb-set').addEventListener('click', () => {
-            const val = document.getElementById('hb-ip').value.trim();
+            const val = (document.getElementById('hb-ip').value || '').trim();
             if (!val) return;
             localStorage.setItem('hermes_bridge_api', val);
-            dbg('Manual API set: ' + val);
+            dbg('Manual API set: ' + val + '\nRefresh this page...');
             div.remove();
-            boot();
         });
     }
 
@@ -116,21 +117,18 @@
     }
 
     function formatErrorInfo(resp) {
-        if (!resp) return 'no response object';
+        if (!resp) return '(no resp)';
         const parts = [];
-        if (resp.status !== undefined && resp.status !== null && resp.status !== 0) parts.push('status=' + resp.status);
-        if (resp.statusText) parts.push('statusText=' + JSON.stringify(resp.statusText));
-        if (resp.error) parts.push('error=' + JSON.stringify(resp.error));
-        if (resp.readyState !== undefined) parts.push('readyState=' + resp.readyState);
-        if (resp.finalUrl && resp.finalUrl !== resp.url) parts.push('finalUrl=' + resp.finalUrl);
-        if (parts.length === 0) return JSON.stringify(resp);
-        return parts.join(' | ');
+        if (resp.status && resp.status !== 0) parts.push('status=' + resp.status);
+        if (resp.statusText && resp.statusText !== '') parts.push('text=' + resp.statusText);
+        if (resp.error) parts.push('err=' + resp.error);
+        return parts.join(' | ') || '(blank)';
     }
 
     function xhr(method, url, data, timeoutMs, onload, onerror) {
         if (!gmXHR) {
             dbg('GM_xmlhttpRequest not available!');
-            if (onerror) onerror({error:'GM_xmlhttpRequest unavailable'});
+            if (onerror) onerror({error:'GM unavailable'});
             return;
         }
         const opts = {
@@ -145,11 +143,7 @@
             onerror: function(resp) {
                 if (isUnloading) return;
                 const info = formatErrorInfo(resp);
-                if (info && info.length > 0) {
-                    dbg('XHR error: ' + info);
-                } else {
-                    dbg('XHR error: (empty)');
-                }
+                if (info && info !== '(blank)') dbg('XHR error: ' + info);
                 if (onerror) onerror(resp);
             },
             ontimeout: function(resp) {
@@ -161,54 +155,38 @@
         gmXHR(opts);
     }
 
-    // --- WebRTC IP discovery ---
+    // WebRTC IP discovery
     function discoverLocalIPs() {
         return new Promise(function(resolve) {
             const ips = [];
             try {
                 const pc = new RTCPeerConnection({iceServers: []});
-                // Firefox might need a data channel
                 if (pc.createDataChannel) pc.createDataChannel('');
                 pc.onicecandidate = function(ice) {
-                    if (!ice || !ice.candidate || !ice.candidate.candidate) {
-                        resolve(ips);
-                        return;
-                    }
+                    if (!ice || !ice.candidate || !ice.candidate.candidate) { resolve(ips); return; }
                     const ipMatch = /([0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3})/.exec(ice.candidate.candidate);
                     if (ipMatch) {
                         const ip = ipMatch[1];
-                        if (ip !== '127.0.0.1' && ip.indexOf('0.0.0.0') !== 0 && ips.indexOf(ip) === -1) {
-                            ips.push(ip);
-                        }
+                        if (ip !== '127.0.0.1' && ip.indexOf('0.0.0.0') !== 0 && ips.indexOf(ip) === -1) ips.push(ip);
                     }
                 };
-                pc.createOffer().then(function(o) {
-                    pc.setLocalDescription(o, function(){}, function(){ resolve(ips); });
-                }).catch(function() { resolve(ips); });
+                pc.createOffer().then(function(o) { pc.setLocalDescription(o, function(){}, function(){}); }).catch(function(){});
                 setTimeout(function() { resolve(ips); }, 2000);
-            } catch(e) {
-                resolve(ips);
-            }
+            } catch(e) { resolve(ips); }
         });
     }
 
-    // --- Build candidate list ---
     async function buildCandidates() {
         if (USER_API) return [USER_API];
         const candidates = new Set();
-        // Always try loopback first (fastest)
         candidates.add('http://localhost:8765');
         candidates.add('http://127.0.0.1:8765');
         candidates.add('http://' + location.hostname + ':8765');
-        // WebRTC discovered IPs
         const rtcIps = await discoverLocalIPs();
-        rtcIps.forEach(function(ip) {
-            candidates.add('http://' + ip + ':8765');
-        });
+        rtcIps.forEach(function(ip) { candidates.add('http://' + ip + ':8765'); });
         return Array.from(candidates);
     }
 
-    // --- Discover working API base ---
     function discoverAPI(callback) {
         buildCandidates().then(function(API_CANDIDATES) {
             let tried = 0;
@@ -216,14 +194,14 @@
             const attempted = [];
             function tryNext() {
                 if (tried >= total) {
-                    dbg('No API reachable after trying ' + total + ' candidates');
+                    dbg('No API reachable after ' + total + ' tries');
                     showManualInput(attempted);
                     callback(null);
                     return;
                 }
                 const base = API_CANDIDATES[tried++];
                 attempted.push(base);
-                dbg('Trying API: ' + base + '...');
+                dbg('Trying: ' + base);
                 xhr('GET', base + '/api/ping', null, BOOT_TIMEOUT_MS, function(resp) {
                     try {
                         const d = JSON.parse(resp.responseText);
@@ -231,42 +209,43 @@
                             dbg('API OK: ' + base);
                             API_BASE = base;
                             consecutiveErrors = 0;
+                            // Auto-save working IP for future reloads
+                            if (typeof localStorage !== 'undefined') {
+                                localStorage.setItem('hermes_bridge_api', base);
+                            }
                             callback(base);
                             return;
                         }
                     } catch(e) {}
-                    // Clean up manual input if it was showing and we found one
-                    const manual = document.getElementById('hb-manual-input');
-                    if (manual) manual.remove();
                     tryNext();
-                }, function() {
-                    tryNext();
-                });
+                }, function() { tryNext(); });
             }
             tryNext();
         });
     }
 
-    // --- Polling loop ---
     function startPolling() {
         if (isPolling) return;
         isPolling = true;
+        consecutiveErrors = 0;
         doPoll();
     }
 
     function doPoll() {
         if (!isPolling || !API_BASE) return;
-        if (metaRefreshSec > 0 && metaRefreshSec < 10) {
-            setStatus('paused (meta-refresh)', '#888');
+        if (metaRefreshSec > 0 && metaRefreshSec < 8) {
+            setStatus('paused (refresh)', '#888');
             setTimeout(function() {
                 detectMetaRefresh();
-                doPoll();
+                if (metaRefreshSec === 0 || metaRefreshSec >= 8) { setStatus('polling', '#ff0'); doPoll(); }
+                else doPoll();
             }, metaRefreshSec * 1000);
             return;
         }
         const fullUrl = location.href;
         const shortUrl = fullUrl.length > 2000 ? fullUrl.slice(0, 2000) + '...' : fullUrl;
-        const url = API_BASE + '/api/poll?client_id=' + encodeURIComponent(clientId || '') + '&url=' + encodeURIComponent(shortUrl);
+        const url = API_BASE + '/api/poll?client_id=' + encodeURIComponent(clientId || '') 
+                    + '&url=' + encodeURIComponent(shortUrl);
         xhr('GET', url, null, POLL_TIMEOUT_MS, function(resp) {
             consecutiveErrors = 0;
             try {
@@ -275,28 +254,37 @@
                     dbg('RCV: ' + msg.data.action);
                     handleCommand(msg.data);
                 }
-                if (msg.client_id && !clientId) {
+                if (msg.client_id && (!clientId || msg.client_id !== clientId)) {
                     clientId = msg.client_id;
-                    dbg('Registered as client ' + clientId.slice(-6));
-                    setStatus('connected', '#0f0');
+                    dbg('Registered: ' + clientId.slice(-6));
+                    if (typeof sessionStorage !== 'undefined') {
+                        sessionStorage.setItem('hermes_client_id_' + TAB_ID, clientId);
+                    }
                 }
+                setStatus('connected', '#0f0');
             } catch(e) {
-                dbg('Bad poll response: ' + (resp.responseText || '').slice(0,200));
+                dbg('Bad poll response');
             }
-            setTimeout(doPoll, 100);
+            // Poll faster when meta-refresh is active
+            const delay = (metaRefreshSec > 0 && metaRefreshSec < 10) ? 50 : 100;
+            setTimeout(doPoll, delay);
         }, function() {
             consecutiveErrors++;
-            setStatus('disconnected', '#f44');
+            setStatus('err ' + consecutiveErrors, '#f44');
             if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
-                dbg('Too many errors on ' + API_BASE + ' — rediscovering...');
+                dbg('Too many errors — rediscovering...');
                 API_BASE = null;
                 clientId = null;
+                if (typeof sessionStorage !== 'undefined') {
+                    sessionStorage.removeItem('hermes_client_id_' + TAB_ID);
+                }
             }
+            isPolling = false;
             setTimeout(function() {
-                isPolling = false;
                 discoverAPI(function(base) {
                     if (base) startPolling();
-                    else setTimeout(boot, RECONNECT_MS);
+                    else if (bootTimer) clearTimeout(bootTimer);
+                    bootTimer = setTimeout(boot, RECONNECT_MS);
                 });
             }, RECONNECT_MS);
         });
@@ -306,13 +294,12 @@
         if (!API_BASE) return;
         const url = API_BASE + '/api/response?client_id=' + encodeURIComponent(clientId || '');
         xhr('POST', url, obj, BOOT_TIMEOUT_MS, function() {
-            dbg('SND: ' + obj.type);
+            // dbg('SND: ' + obj.type);
         }, function() {
             dbg('Send failed');
         });
     }
 
-    // --- Element map ---
     function buildInteractiveMap() {
         interactiveMap.clear();
         const sel = 'a, button, input, textarea, select, [role="button"], [role="link"], [role="tab"], summary, label';
@@ -358,149 +345,82 @@
         return tag;
     }
 
-    // --- Commands ---
     function handleCommand(cmd) {
         const id = cmd.id || 0;
         try {
             switch (cmd.action) {
-                case 'ping':
-                    sendResult({type: 'pong', id});
+                case 'ping': sendResult({type:'pong',id}); break;
+                case 'getInfo': sendResult({type:'result',id,data:{url:location.href,title:document.title,width:window.innerWidth,height:window.innerHeight,scrollX:window.scrollX,scrollY:window.scrollY}}); break;
+                case 'getHtml': sendResult({type:'result',id,data:document.documentElement.outerHTML}); break;
+                case 'getText': sendResult({type:'result',id,data:document.body.innerText}); break;
+                case 'querySelector': { const q=document.querySelector(cmd.selector); sendResult({type:'result',id,data:q?summarizeElement(q):null}); break; }
+                case 'querySelectorAll': { const qa=Array.from(document.querySelectorAll(cmd.selector)); sendResult({type:'result',id,data:qa.map(function(e){return summarizeElement(e);})}); break; }
+                case 'getInteractiveElements': { buildInteractiveMap(); const out=[]; interactiveMap.forEach(function(el,ref){var s=summarizeElement(el);s.ref=ref;out.push(s);}); sendResult({type:'result',id,data:out}); break;}
+                case 'click': { const c=document.querySelector(cmd.selector); if(c){c.scrollIntoView({block:'center'});setTimeout(function(){c.click();sendResult({type:'result',id,data:'clicked'});},200);}else sendResult({type:'error',id,message:'element not found'}); break;}
+                case 'clickByRef': { let cr=interactiveMap.get(cmd.ref); if(!cr){buildInteractiveMap();cr=interactiveMap.get(cmd.ref);} if(cr){cr.scrollIntoView({block:'center'});setTimeout(function(){cr.click();sendResult({type:'result',id,data:'clicked '+cmd.ref});},200);}else sendResult({type:'error',id,message:'ref not found: '+cmd.ref}); break;}
+                case 'type': { const t=document.querySelector(cmd.selector); if(!t){sendResult({type:'error',id,message:'element not found'}); break;} t.focus(); if(t.contentEditable==='true'){if(cmd.clear!==false)t.innerText='';t.innerText=(cmd.text||'');t.dispatchEvent(new InputEvent('input',{bubbles:true,data:(cmd.text||''),inputType:'insertText'}));}else{if(cmd.clear!==false)t.value='';t.value=(cmd.text||'');['input','change','keyup','keydown'].forEach(function(ev){t.dispatchEvent(new Event(ev,{bubbles:true}));});} sendResult({type:'result',id,data:'typed'}); break;}
+                case 'press': { const target=document.querySelector(cmd.selector)||document.activeElement||document.body; const k=(cmd.key||'Enter').toLowerCase(); const map={enter:{key:'Enter',code:'Enter',keyCode:13,which:13},tab:{key:'Tab',code:'Tab',keyCode:9,which:9},escape:{key:'Escape',code:'Escape',keyCode:27,which:27},esc:{key:'Escape',code:'Escape',keyCode:27,which:27},arrowdown:{key:'ArrowDown',code:'ArrowDown',keyCode:40,which:40},arrowup:{key:'ArrowUp',code:'ArrowUp',keyCode:38,which:38},space:{key:' ',code:'Space',keyCode:32,which:32}}; const d=map[k]||{key:cmd.key,code:cmd.key,keyCode:0,which:0}; ['keydown','keypress','keyup'].forEach(function(typ){target.dispatchEvent(new KeyboardEvent(typ,{bubbles:true,cancelable:true,key:d.key,code:d.code,keyCode:d.keyCode,which:d.which}));}); sendResult({type:'result',id,data:'pressed '+cmd.key}); break;}
+                case 'scroll': { const dir=cmd.direction||'down'; const amt=cmd.amount||500; if(dir==='down')window.scrollBy(0,amt);else if(dir==='up')window.scrollBy(0,-amt);else if(dir==='top')window.scrollTo(0,0);else if(dir==='bottom')window.scrollTo(0,document.body.scrollHeight);else if(dir==='left')window.scrollBy(-amt,0);else if(dir==='right')window.scrollBy(amt,0); sendResult({type:'result',id,data:'scrolled '+dir}); break;}
+                case 'scrollToElement': { const st=document.querySelector(cmd.selector);if(st){st.scrollIntoView({block:'center',behavior:'smooth'});sendResult({type:'result',id,data:'scrolled'});}else sendResult({type:'error',id,message:'element not found'}); break;}
+                case 'navigate': location.href = cmd.url; break;
+                case 'focus': { const f=document.querySelector(cmd.selector);if(f){f.focus();sendResult({type:'result',id,data:'focused'});}else sendResult({type:'error',id,message:'element not found'}); break;}
+                case 'getValue': { const gv=document.querySelector(cmd.selector);if(gv)sendResult({type:'result',id,data:gv.value});else sendResult({type:'error',id,message:'element not found'}); break;}
+                case 'eval': { let res;try{res=eval(cmd.code);}catch(e){sendResult({type:'error',id,message:e.message});break;} let payload;try{payload=JSON.parse(JSON.stringify(res));}catch(e){payload=String(res);} sendResult({type:'result',id,data:payload}); break;}
+                case 'waitForSelector': { const wsSel=cmd.selector;const wsMs=(cmd.timeout||5)*1000;const wsStart=Date.now();const wsPoll=function(){const wEl=document.querySelector(wsSel);if(wEl)sendResult({type:'result',id,data:{found:true,selector:wsSel}});else if(Date.now()-wsStart<wsMs)setTimeout(wsPoll,250);else sendResult({type:'result',id,data:{found:false,selector:wsSel,timeout:true}});}; wsPoll(); break;}
+                case 'getImageUrls': {
+                    const imgs = Array.from(document.querySelectorAll('img'));
+                    const out = imgs.filter(function(i){return i.src||i.dataset.src;}).slice(0,50).map(function(i){return {src:i.src||i.dataset.src,alt:i.alt||'',width:i.naturalWidth,height:i.naturalHeight};});
+                    sendResult({type:'result',id,data:out});
                     break;
-                case 'getInfo':
-                    sendResult({type: 'result', id, data: {
-                        url: location.href, title: document.title,
-                        width: window.innerWidth, height: window.innerHeight,
-                        scrollX: window.scrollX, scrollY: window.scrollY
-                    }}); break;
-                case 'getHtml':
-                    sendResult({type: 'result', id, data: document.documentElement.outerHTML}); break;
-                case 'getText':
-                    sendResult({type: 'result', id, data: document.body.innerText}); break;
-                case 'querySelector': {
-                    const q = document.querySelector(cmd.selector);
-                    sendResult({type: 'result', id, data: q ? summarizeElement(q) : null}); break; }
-                case 'querySelectorAll': {
-                    const qa = Array.from(document.querySelectorAll(cmd.selector));
-                    sendResult({type: 'result', id, data: qa.map(function(e) { return summarizeElement(e); })}); break; }
-                case 'getInteractiveElements': {
-                    buildInteractiveMap();
-                    const out = [];
-                    interactiveMap.forEach(function(el, ref) { var s=summarizeElement(el); s.ref=ref; out.push(s); });
-                    sendResult({type: 'result', id, data: out}); break; }
-                case 'click': {
-                    const c = document.querySelector(cmd.selector);
-                    if (c) { c.scrollIntoView({block:'center'}); setTimeout(function(){c.click();sendResult({type:'result',id,data:'clicked'});},200); }
-                    else sendResult({type:'error',id,message:'element not found'}); break; }
-                case 'clickByRef': {
-                    let cr = interactiveMap.get(cmd.ref);
-                    if (!cr) { buildInteractiveMap(); cr = interactiveMap.get(cmd.ref); }
-                    if (cr) { cr.scrollIntoView({block:'center'}); setTimeout(function(){cr.click();sendResult({type:'result',id,data:'clicked '+cmd.ref});},200); }
-                    else sendResult({type:'error',id,message:'ref not found: '+cmd.ref}); break; }
-                case 'type': {
-                    const t = document.querySelector(cmd.selector);
-                    if (!t) { sendResult({type:'error',id,message:'element not found'}); break; }
-                    t.focus();
-                    if (t.contentEditable === 'true') {
-                        if (cmd.clear!==false) t.innerText='';
-                        t.innerText=(cmd.text||'');
-                        t.dispatchEvent(new InputEvent('input',{bubbles:true,data:(cmd.text||''),inputType:'insertText'}));
-                    } else {
-                        if (cmd.clear!==false) t.value='';
-                        t.value=(cmd.text||'');
-                        ['input','change','keyup','keydown'].forEach(function(ev){ t.dispatchEvent(new Event(ev,{bubbles:true})); });
-                    }
-                    sendResult({type:'result',id,data:'typed'}); break; }
-                case 'press': {
-                    const target = document.querySelector(cmd.selector) || document.activeElement || document.body;
-                    const k = (cmd.key||'Enter').toLowerCase();
-                    const map = {enter:{key:'Enter',code:'Enter',keyCode:13,which:13},tab:{key:'Tab',code:'Tab',keyCode:9,which:9},escape:{key:'Escape',code:'Escape',keyCode:27,which:27},esc:{key:'Escape',code:'Escape',keyCode:27,which:27},arrowdown:{key:'ArrowDown',code:'ArrowDown',keyCode:40,which:40},arrowup:{key:'ArrowUp',code:'ArrowUp',keyCode:38,which:38},arrowleft:{key:'ArrowLeft',code:'ArrowLeft',keyCode:37,which:37},arrowright:{key:'ArrowRight',code:'ArrowRight',keyCode:39,which:39},space:{key:' ',code:'Space',keyCode:32,which:32}};
-                    const d = map[k] || {key:cmd.key,code:cmd.key,keyCode:0,which:0};
-                    ['keydown','keypress','keyup'].forEach(function(typ){ target.dispatchEvent(new KeyboardEvent(typ,{bubbles:true,cancelable:true,key:d.key,code:d.code,keyCode:d.keyCode,which:d.which})); });
-                    sendResult({type:'result',id,data:'pressed '+cmd.key}); break; }
-                case 'scroll': {
-                    const dir = cmd.direction || 'down'; const amt = cmd.amount || 500;
-                    if (dir==='down') window.scrollBy(0,amt); else if (dir==='up') window.scrollBy(0,-amt);
-                    else if (dir==='top') window.scrollTo(0,0); else if (dir==='bottom') window.scrollTo(0,document.body.scrollHeight);
-                    else if (dir==='left') window.scrollBy(-amt,0); else if (dir==='right') window.scrollBy(amt,0);
-                    sendResult({type:'result',id,data:'scrolled '+dir}); break; }
-                case 'scrollToElement': {
-                    const st = document.querySelector(cmd.selector);
-                    if (st) { st.scrollIntoView({block:'center',behavior:'smooth'}); sendResult({type:'result',id,data:'scrolled'}); }
-                    else sendResult({type:'error',id,message:'element not found'}); break; }
-                case 'navigate':
-                    location.href = cmd.url; break;
-                case 'eval': {
-                    let res; try { res = eval(cmd.code); } catch(e) { sendResult({type:'error',id,message:e.message}); break; }
-                    let payload; try { payload = JSON.parse(JSON.stringify(res)); } catch(e) { payload = String(res); }
-                    sendResult({type:'result',id,data:payload}); break; }
-                case 'waitForSelector': {
-                    const wsSel = cmd.selector; const wsMs = (cmd.timeout||5)*1000; const wsStart = Date.now();
-                    const wsPoll = function() { const wEl=document.querySelector(wsSel); if(wEl)sendResult({type:'result',id,data:{found:true,selector:wsSel}}); else if(Date.now()-wsStart<wsMs)setTimeout(wsPoll,250); else sendResult({type:'result',id,data:{found:false,selector:wsSel,timeout:true}}); };
-                    wsPoll(); break; }
-                case 'focus': {
-                    const f = document.querySelector(cmd.selector);
-                    if (f) { f.focus(); sendResult({type:'result',id,data:'focused'}); }
-                    else sendResult({type:'error',id,message:'element not found'}); break; }
-                case 'getValue': {
-                    const gv = document.querySelector(cmd.selector);
-                    if (gv) sendResult({type:'result',id,data:gv.value}); else sendResult({type:'error',id,message:'element not found'}); break; }
-                case 'setValue': {
-                    const sv = document.querySelector(cmd.selector);
-                    if (sv) { sv.value = cmd.value; ['input','change'].forEach(function(e){ sv.dispatchEvent(new Event(e,{bubbles:true})); }); sendResult({type:'result',id,data:'value set'}); }
-                    else sendResult({type:'error',id,message:'element not found'}); break; }
-                case 'screenshotInfo': {
-                    sendResult({type:'result',id,data:{width:window.innerWidth,height:window.innerHeight,scrollX:window.scrollX,scrollY:window.scrollY,url:location.href,devicePixelRatio:window.devicePixelRatio}}); break; }
-                default:
-                    sendResult({type:'error',id,message:'unknown action: '+cmd.action});
+                }
+                default: sendResult({type:'error',id,message:'unknown action: '+cmd.action});
             }
         } catch(err) {
             sendResult({type:'error',id,message:err.message});
         }
     }
 
-    // --- Boot ---
     function boot() {
-        if (!document.body) { setTimeout(boot, 100); return; }
+        if (!document.body) { if (bootTimer) clearTimeout(bootTimer); bootTimer = setTimeout(boot, 100); return; }
         createPanel();
         detectMetaRefresh();
-        dbg('CSP-safe bridge loaded on ' + location.href);
-        if (metaRefreshSec > 0) {
-            dbg('Note: page auto-refreshes every ' + metaRefreshSec + 's');
-        }
+        dbg('Bridge v1.6.1 loaded on ' + location.href.slice(0,60));
+        if (metaRefreshSec > 0) dbg('Meta-refresh: ' + metaRefreshSec + 's');
         setStatus('discovering...', '#fa0');
 
         discoverAPI(function(base) {
             if (!base) {
                 setStatus('no API', '#f44');
-                dbg('Will retry in ' + RECONNECT_MS + 'ms');
-                setTimeout(boot, RECONNECT_MS);
+                if (bootTimer) clearTimeout(bootTimer);
+                bootTimer = setTimeout(boot, RECONNECT_MS);
                 return;
             }
             const fullUrl = location.href;
             const shortUrl = fullUrl.length > 2000 ? fullUrl.slice(0, 2000) + '...' : fullUrl;
-            const url = API_BASE + '/api/poll?url=' + encodeURIComponent(shortUrl);
+            const url = API_BASE + '/api/poll?client_id=' + encodeURIComponent(clientId || '') + '&url=' + encodeURIComponent(shortUrl);
             xhr('GET', url, null, BOOT_TIMEOUT_MS, function(resp) {
                 try {
                     const d = JSON.parse(resp.responseText);
                     if (d.client_id) {
                         clientId = d.client_id;
-                        dbg('Registered as client ' + clientId.slice(-6));
+                        dbg('Registered: ' + clientId.slice(-6));
+                        if (typeof sessionStorage !== 'undefined') {
+                            sessionStorage.setItem('hermes_client_id_' + TAB_ID, clientId);
+                        }
                         setStatus('connected', '#0f0');
                     } else {
                         setStatus('polling', '#ff0');
                     }
-                } catch(e) {
-                    dbg('Poll response parse error');
-                }
+                } catch(e) { dbg('Parse error'); }
                 startPolling();
             }, function() {
                 setStatus('disconnected', '#f44');
-                setTimeout(boot, RECONNECT_MS);
+                if (bootTimer) clearTimeout(bootTimer);
+                bootTimer = setTimeout(boot, RECONNECT_MS);
             });
         });
     }
 
-    // --- Graceful unload handling ---
     window.addEventListener('beforeunload', function() {
         isUnloading = true;
         if (API_BASE && clientId && gmXHR) {
@@ -516,9 +436,15 @@
         }
     });
 
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', boot);
+    // Prevent multiple boots
+    if (window.__HERMES_BRIDGE_BOOT__) {
+        dbg('Already booted in this window');
     } else {
-        boot();
+        window.__HERMES_BRIDGE_BOOT__ = true;
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', boot);
+        } else {
+            boot();
+        }
     }
 })();
