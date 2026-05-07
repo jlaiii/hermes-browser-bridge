@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Hermes Browser Bridge (CSP-safe)
 // @namespace    http://hermes-agent.local/
-// @version      1.6.2
-// @description  CSP-safe remote control for any browser tab. HTTP short-polling bridge that bypasses CSP. v1.6.2: stable clientId, fix GET data:null bug, smarter rediscovery.
+// @version      1.6.6
+// @description  CSP-safe remote control for any browser tab. HTTP short-polling bridge that bypasses CSP. v1.6.6: prefers localhost first, avoids stale WSL IP caching, drops location.hostname candidate.
 // @author       Hermes Agent
 // @match        *://*/*
 // @grant        GM_xmlhttpRequest
@@ -16,13 +16,18 @@
 (function() {
     'use strict';
 
+    // Prevent bridge from running inside iframes/hidden frames
+    if (window.self !== window.top) {
+        return;
+    }
+
     // --- User overrides ---
     const USER_API = (typeof window !== 'undefined' && window.__HERMES_BRIDGE_API__)
         || (typeof localStorage !== 'undefined' && localStorage.getItem('hermes_bridge_api'))
         || null;
 
     // --- Config ---
-    const BOOT_TIMEOUT_MS = 4000;
+    const BOOT_TIMEOUT_MS = 2500;
     const POLL_TIMEOUT_MS = 30000;
     const RECONNECT_MS = 3000;
     const MAX_CONSECUTIVE_ERRORS = 5;
@@ -176,32 +181,74 @@
         });
     }
 
+    function isVirtualIP(ip) {
+        // VirtualBox host-only, VMware NAT, libvirt, Hyper-V internal, etc.
+        if (/^192\.168\.56\./.test(ip)) return true;   // VirtualBox host-only
+        if (/^192\.168\.122\./.test(ip)) return true;  // libvirt/KVM
+        if (/^192\.168\.254\./.test(ip)) return true;  // VMware NAT/common VM
+        if (/^192\.168\.42\./.test(ip)) return true;   // Some Android/VM tether
+        return false;
+    }
+
+    function ipScore(ip) {
+        // Lower = preferred. 0=real LAN, 1=WSL, 2=virtual, 3=localhost
+        if (ip === '127.0.0.1' || ip === 'localhost') return 3;
+        if (/^172\.(1[6-9]|2[0-9]|3[01])\./.test(ip)) return 1; // WSL/Hyper-V
+        if (isVirtualIP(ip)) return 2;
+        return 0; // real LAN / wifi / ethernet
+    }
+
     async function buildCandidates() {
-        if (USER_API) return [USER_API];
-        const candidates = new Set();
-        candidates.add('http://localhost:8765');
-        candidates.add('http://127.0.0.1:8765');
-        candidates.add('http://' + location.hostname + ':8765');
+        const candidates = [];
+        // 1. User override always wins, BUT validate it's not stale WSL IP first
+        if (USER_API) {
+            const apiIpMatch = USER_API.match(/https?:\/\/([^:]+):/);
+            const apiIp = apiIpMatch ? apiIpMatch[1] : '';
+            // If stored IP looks like a WSL IP, don't trust it blindly
+            if (!isWslIP(apiIp)) {
+                candidates.push(USER_API);
+            }
+        }
+        // 2. Localhost FIRST (most reliable from Windows browser -> WSL via loopback forwarding)
+        candidates.push('http://localhost:8765');
+        candidates.push('http://127.0.0.1:8765');
+        // 3. RTC-discovered IPs (LAN-first ordering)
         const rtcIps = await discoverLocalIPs();
-        rtcIps.forEach(function(ip) { candidates.add('http://' + ip + ':8765'); });
-        return Array.from(candidates);
+        rtcIps.sort(function(a, b){ return ipScore(a) - ipScore(b); });
+        rtcIps.forEach(function(ip) { candidates.push('http://' + ip + ':8765'); });
+        // Dedupe while preserving order
+        const seen = new Set();
+        const out = [];
+        candidates.forEach(function(c) {
+            if (!seen.has(c)) { seen.add(c); out.push(c); }
+        });
+        return out;
+    }
+
+    function isWslIP(ip) {
+        return /^172\.(1[6-9]|2[0-9]|3[01])\./.test(ip);
     }
 
     function discoverAPI(callback) {
         buildCandidates().then(function(API_CANDIDATES) {
-            let tried = 0;
-            const total = API_CANDIDATES.length;
-            const attempted = [];
-            function tryNext() {
-                if (tried >= total) {
-                    dbg('No API reachable after ' + total + ' tries');
+            if (!API_CANDIDATES.length) {
+                callback(null);
+                return;
+            }
+            let idx = 0;
+            let attempted = [];
+
+            function next() {
+                if (idx >= API_CANDIDATES.length) {
+                    dbg('No API reachable after ' + attempted.length + ' tries');
                     showManualInput(attempted);
                     callback(null);
                     return;
                 }
-                const base = API_CANDIDATES[tried++];
+                const base = API_CANDIDATES[idx++];
                 attempted.push(base);
                 dbg('Trying: ' + base);
+                // Test a real poll round-trip (not just ping) to ensure the path is solid
                 xhr('GET', base + '/api/ping', null, BOOT_TIMEOUT_MS, function(resp) {
                     try {
                         const d = JSON.parse(resp.responseText);
@@ -209,18 +256,23 @@
                             dbg('API OK: ' + base);
                             API_BASE = base;
                             consecutiveErrors = 0;
-                            // Auto-save working IP for future reloads
-                            if (typeof localStorage !== 'undefined') {
+                            // Don't persist virtual IPs or WSL IPs to localStorage
+                            const ipMatch = base.match(/https?:\/\/([^:]+):/);
+                            const ip = ipMatch ? ipMatch[1] : '';
+                            if (typeof localStorage !== 'undefined' && !isVirtualIP(ip) && !isWslIP(ip) && ip !== 'localhost' && ip !== '127.0.0.1') {
                                 localStorage.setItem('hermes_bridge_api', base);
                             }
                             callback(base);
                             return;
                         }
                     } catch(e) {}
-                    tryNext();
-                }, function() { tryNext(); });
+                    next();
+                }, function() {
+                    next();
+                });
             }
-            tryNext();
+
+            next();
         });
     }
 
@@ -254,7 +306,7 @@
                     dbg('RCV: ' + msg.data.action);
                     handleCommand(msg.data);
                 }
-                if (msg.client_id && (!clientId || msg.client_id !== clientId)) {
+                if (msg.client_id && msg.client_id !== clientId) {
                     clientId = msg.client_id;
                     dbg('Registered: ' + clientId.slice(-6));
                     if (typeof sessionStorage !== 'undefined') {
@@ -273,23 +325,26 @@
             setStatus('err ' + consecutiveErrors, '#f44');
             if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
                 dbg('Too many errors — rediscovering...');
+                isPolling = false;
                 API_BASE = null;
                 clientId = null;
                 if (typeof sessionStorage !== 'undefined') {
                     sessionStorage.removeItem('hermes_client_id_' + TAB_ID);
                 }
+                setTimeout(function() {
+                    discoverAPI(function(base) {
+                        if (base) {
+                            startPolling();
+                        } else {
+                            if (bootTimer) clearTimeout(bootTimer);
+                            bootTimer = setTimeout(boot, RECONNECT_MS);
+                        }
+                    });
+                }, RECONNECT_MS);
+                return;
             }
-            isPolling = false;
-            setTimeout(function() {
-                discoverAPI(function(base) {
-                    if (base) {
-                        startPolling();
-                    } else {
-                        if (bootTimer) clearTimeout(bootTimer);
-                        bootTimer = setTimeout(boot, RECONNECT_MS);
-                    }
-                });
-            }, RECONNECT_MS);
+            // transient error — just retry poll shortly
+            setTimeout(doPoll, 1500);
         });
     }
 
@@ -384,17 +439,17 @@
     }
 
     function boot() {
-        if (!document.body) { if (bootTimer) clearTimeout(bootTimer); bootTimer = setTimeout(boot, 100); return; }
+        if (bootTimer) { clearTimeout(bootTimer); bootTimer = null; }
+        if (!document.body) { bootTimer = setTimeout(boot, 100); return; }
         createPanel();
         detectMetaRefresh();
-        dbg('Bridge v1.6.2 loaded on ' + location.href.slice(0,60));
+        dbg('Bridge v1.6.5 loaded on ' + location.href.slice(0,60));
         if (metaRefreshSec > 0) dbg('Meta-refresh: ' + metaRefreshSec + 's');
         setStatus('discovering...', '#fa0');
 
         discoverAPI(function(base) {
             if (!base) {
                 setStatus('no API', '#f44');
-                if (bootTimer) clearTimeout(bootTimer);
                 bootTimer = setTimeout(boot, RECONNECT_MS);
                 return;
             }

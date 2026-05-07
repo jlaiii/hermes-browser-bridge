@@ -4,6 +4,8 @@
 
 **[🌐 Live Site](https://jlaiii.github.io/hermes-browser-bridge/)**
 
+**Latest:** v1.6.6 — localhost-first discovery, no stale WSL IP caching, instant connection on WSL2/Windows.
+
 ---
 
 ## Who It's For
@@ -14,6 +16,15 @@
 - **Anyone who needs browser automation** when WebSockets and extensions are blocked
 
 ---
+
+## What's New in v1.6.6
+
+- **localhost tried FIRST** — connects instantly on WSL2/Windows where `localhost:8765` is the most reliable path
+- **No more stale WSL IP caching** — 172.x addresses change on reboot; they are no longer persisted to `localStorage`
+- **Dropped `location.hostname` candidate** — no more nonsensical attempts like `http://www.google.com:8765`
+- **Shorter timeout** — 2500ms per candidate instead of 4000ms, faster failover
+- **Iframe guard** — script refuses to run inside hidden iframes (prevents fake clients)
+- **Manual IP input** — when auto-discovery fails, a panel appears to enter the relay IP manually
 
 ## What It Does
 

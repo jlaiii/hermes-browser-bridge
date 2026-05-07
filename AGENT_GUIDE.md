@@ -15,9 +15,17 @@ Because it uses **HTTP short-polling via `GM_xmlhttpRequest`**, it bypasses ever
 
 ---
 
-## Setup Steps
+## What's New in v1.6.6
 
-### 1. Relay (AI Side)
+- **localhost tried FIRST** — the userscript now attempts `http://localhost:8765` before any RTC-discovered IPs. This fixes the most common WSL2 setup where Windows browsers reach WSL via loopback forwarding.
+- **No stale WSL IP caching** — `172.x.x.x` WSL addresses change on reboot. They are no longer persisted to `localStorage`, preventing "No API reachable" after a reboot.
+- **Dropped `location.hostname` candidate** — no more attempts like `http://www.google.com:8765`.
+- **Iframe guard** — script refuses to run inside hidden iframes, preventing duplicate phantom clients.
+- **Manual IP input** — when auto-discovery fails, a UI panel lets the user type the relay IP directly.
+
+---
+
+## Setup Steps
 
 You need Python 3.9+ and `aiohttp`.
 
