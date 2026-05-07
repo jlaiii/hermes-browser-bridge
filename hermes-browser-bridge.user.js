@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Hermes Browser Bridge (CSP-safe)
 // @namespace    http://hermes-agent.local/
-// @version      1.5.1
-// @description  CSP-safe remote control for any browser tab. HTTP short-polling bridge that bypasses CSP. v1.5.1: fixes URL-too-long crashes.
+// @version      1.6.0
+// @description  CSP-safe remote control for any browser tab. HTTP short-polling bridge that bypasses CSP. v1.6: auto-discovers local IPs via WebRTC, manual IP fallback UI, deduped candidates.
 // @author       Hermes Agent
 // @match        *://*/*
 // @grant        GM_xmlhttpRequest
@@ -17,24 +17,16 @@
     'use strict';
 
     // --- CONFIG: Override with your relay IP if auto-detect fails ---
-    // Set this in browser console: window.__HERMES_BRIDGE_API__ = 'http://YOUR_IP:8765'
+    // Set in browser console: window.__HERMES_BRIDGE_API__ = 'http://YOUR_IP:8765'
     // Or set localStorage: localStorage.setItem('hermes_bridge_api', 'http://YOUR_IP:8765')
     const USER_API = (typeof window !== 'undefined' && window.__HERMES_BRIDGE_API__)
         || (typeof localStorage !== 'undefined' && localStorage.getItem('hermes_bridge_api'))
         || null;
 
-    // Auto-detect: page host first, then localhost, then 127.0.0.1
-    const API_CANDIDATES = USER_API
-        ? [USER_API]
-        : [
-            'http://' + (location.hostname || 'localhost') + ':8765',
-            'http://localhost:8765',
-            'http://' + location.host.split(':')[0] + ':8765',
-            'http://127.0.0.1:8765'
-          ];
     const BOOT_TIMEOUT_MS = 4000;
     const POLL_TIMEOUT_MS = 30000;
     const RECONNECT_MS = 2000;
+    const MAX_CONSECUTIVE_ERRORS = 5;
 
     let API_BASE = null;
     let clientId = null;
@@ -42,10 +34,23 @@
     let logLines = [];
     let panel = null;
     let interactiveMap = new Map();
+    let isUnloading = false;
+    let consecutiveErrors = 0;
+    let metaRefreshSec = 0;
 
     const gmXHR = (typeof GM !== 'undefined' && GM.xmlHttpRequest)
                  || (typeof GM_xmlhttpRequest !== 'undefined' && GM_xmlHttpRequest)
                  || null;
+
+    // Detect pages that auto-refresh
+    function detectMetaRefresh() {
+        const meta = document.querySelector('meta[http-equiv="refresh"]');
+        if (meta) {
+            const content = meta.getAttribute('content') || '';
+            const m = content.match(/^\d+/);
+            if (m) metaRefreshSec = parseInt(m[0], 10);
+        }
+    }
 
     function dbg(msg) {
         const line = '[' + new Date().toLocaleTimeString() + '] ' + msg;
@@ -62,7 +67,7 @@
         if (document.getElementById('hermes-bridge-panel')) return;
         const d = document.createElement('div');
         d.id = 'hermes-bridge-panel';
-        d.style.cssText = 'position:fixed;bottom:8px;right:8px;z-index:2147483647;width:380px;max-height:260px;background:#111;border:1px solid #333;border-radius:6px;color:#eee;font-family:monospace;font-size:11px;overflow:hidden;display:flex;flex-direction:column;';
+        d.style.cssText = 'position:fixed;bottom:8px;right:8px;z-index:2147483647;width:420px;max-height:300px;background:#111;border:1px solid #333;border-radius:6px;color:#eee;font-family:monospace;font-size:11px;overflow:hidden;display:flex;flex-direction:column;';
         d.innerHTML = `
             <div style="padding:4px 8px;background:#222;display:flex;justify-content:space-between;align-items:center;cursor:pointer;user-select:none;">
                 <span>Hermes Bridge</span>
@@ -78,9 +83,48 @@
         });
     }
 
+    function showManualInput(attempted) {
+        if (!panel) createPanel();
+        const pre = panel.querySelector('pre');
+        const existing = document.getElementById('hb-manual-input');
+        if (existing) return;
+        const div = document.createElement('div');
+        div.id = 'hb-manual-input';
+        div.style.cssText = 'padding:6px 8px;border-top:1px solid #333;';
+        div.innerHTML = `
+            <div style="color:#f44;margin-bottom:4px;">Cannot find relay. Tried: ${attempted.join(', ')}</div>
+            <div style="display:flex;gap:4px;">
+                <input id="hb-ip" placeholder="http://IP:8765" style="flex:1;padding:4px;border-radius:3px;border:1px solid #555;background:#222;color:#0f0;font-family:monospace;">
+                <button id="hb-set" style="padding:4px 8px;background:#0a0;color:#fff;border:none;border-radius:3px;cursor:pointer;">Connect</button>
+            </div>
+            <div style="margin-top:4px;color:#888;font-size:9px;">Run 'ip addr' in WSL to find your LAN IP. Or enable mirrored networking in .wslconfig.</div>
+        `;
+        panel.appendChild(div);
+        document.getElementById('hb-set').addEventListener('click', () => {
+            const val = document.getElementById('hb-ip').value.trim();
+            if (!val) return;
+            localStorage.setItem('hermes_bridge_api', val);
+            dbg('Manual API set: ' + val);
+            div.remove();
+            boot();
+        });
+    }
+
     function setStatus(txt, color) {
         const s = document.getElementById('hb-status');
         if (s) { s.textContent = txt; s.style.color = color || '#888'; }
+    }
+
+    function formatErrorInfo(resp) {
+        if (!resp) return 'no response object';
+        const parts = [];
+        if (resp.status !== undefined && resp.status !== null && resp.status !== 0) parts.push('status=' + resp.status);
+        if (resp.statusText) parts.push('statusText=' + JSON.stringify(resp.statusText));
+        if (resp.error) parts.push('error=' + JSON.stringify(resp.error));
+        if (resp.readyState !== undefined) parts.push('readyState=' + resp.readyState);
+        if (resp.finalUrl && resp.finalUrl !== resp.url) parts.push('finalUrl=' + resp.finalUrl);
+        if (parts.length === 0) return JSON.stringify(resp);
+        return parts.join(' | ');
     }
 
     function xhr(method, url, data, timeoutMs, onload, onerror) {
@@ -99,46 +143,108 @@
                 if (onload) onload(resp);
             },
             onerror: function(resp) {
-                const info = resp ? (resp.statusText || resp.error || resp.status || 'unknown') : 'unknown';
-                dbg('XHR error: ' + info);
+                if (isUnloading) return;
+                const info = formatErrorInfo(resp);
+                if (info && info.length > 0) {
+                    dbg('XHR error: ' + info);
+                } else {
+                    dbg('XHR error: (empty)');
+                }
                 if (onerror) onerror(resp);
             },
             ontimeout: function(resp) {
-                dbg('XHR timeout');
+                if (isUnloading) return;
+                dbg('XHR timeout: ' + formatErrorInfo(resp));
                 if (onerror) onerror(resp);
             }
         };
         gmXHR(opts);
     }
 
-    // --- Discover working API base ---
-    function discoverAPI(callback) {
-        let tried = 0;
-        const total = API_CANDIDATES.length;
-        function tryNext() {
-            if (tried >= total) {
-                dbg('No API reachable (tried ' + API_CANDIDATES.join(', ') + ')');
-                callback(null);
-                return;
-            }
-            const base = API_CANDIDATES[tried++];
-            dbg('Trying API: ' + base + '...');
-            xhr('GET', base + '/api/ping', null, BOOT_TIMEOUT_MS, function(resp) {
-                try {
-                    const d = JSON.parse(resp.responseText);
-                    if (d.ok) {
-                        dbg('API OK: ' + base);
-                        API_BASE = base;
-                        callback(base);
+    // --- WebRTC IP discovery ---
+    function discoverLocalIPs() {
+        return new Promise(function(resolve) {
+            const ips = [];
+            try {
+                const pc = new RTCPeerConnection({iceServers: []});
+                // Firefox might need a data channel
+                if (pc.createDataChannel) pc.createDataChannel('');
+                pc.onicecandidate = function(ice) {
+                    if (!ice || !ice.candidate || !ice.candidate.candidate) {
+                        resolve(ips);
                         return;
                     }
-                } catch(e) {}
-                tryNext();
-            }, function() {
-                tryNext();
-            });
-        }
-        tryNext();
+                    const ipMatch = /([0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3})/.exec(ice.candidate.candidate);
+                    if (ipMatch) {
+                        const ip = ipMatch[1];
+                        if (ip !== '127.0.0.1' && ip.indexOf('0.0.0.0') !== 0 && ips.indexOf(ip) === -1) {
+                            ips.push(ip);
+                        }
+                    }
+                };
+                pc.createOffer().then(function(o) {
+                    pc.setLocalDescription(o, function(){}, function(){ resolve(ips); });
+                }).catch(function() { resolve(ips); });
+                setTimeout(function() { resolve(ips); }, 2000);
+            } catch(e) {
+                resolve(ips);
+            }
+        });
+    }
+
+    // --- Build candidate list ---
+    async function buildCandidates() {
+        if (USER_API) return [USER_API];
+        const candidates = new Set();
+        // Always try loopback first (fastest)
+        candidates.add('http://localhost:8765');
+        candidates.add('http://127.0.0.1:8765');
+        candidates.add('http://' + location.hostname + ':8765');
+        // WebRTC discovered IPs
+        const rtcIps = await discoverLocalIPs();
+        rtcIps.forEach(function(ip) {
+            candidates.add('http://' + ip + ':8765');
+        });
+        return Array.from(candidates);
+    }
+
+    // --- Discover working API base ---
+    function discoverAPI(callback) {
+        buildCandidates().then(function(API_CANDIDATES) {
+            let tried = 0;
+            const total = API_CANDIDATES.length;
+            const attempted = [];
+            function tryNext() {
+                if (tried >= total) {
+                    dbg('No API reachable after trying ' + total + ' candidates');
+                    showManualInput(attempted);
+                    callback(null);
+                    return;
+                }
+                const base = API_CANDIDATES[tried++];
+                attempted.push(base);
+                dbg('Trying API: ' + base + '...');
+                xhr('GET', base + '/api/ping', null, BOOT_TIMEOUT_MS, function(resp) {
+                    try {
+                        const d = JSON.parse(resp.responseText);
+                        if (d.ok) {
+                            dbg('API OK: ' + base);
+                            API_BASE = base;
+                            consecutiveErrors = 0;
+                            callback(base);
+                            return;
+                        }
+                    } catch(e) {}
+                    // Clean up manual input if it was showing and we found one
+                    const manual = document.getElementById('hb-manual-input');
+                    if (manual) manual.remove();
+                    tryNext();
+                }, function() {
+                    tryNext();
+                });
+            }
+            tryNext();
+        });
     }
 
     // --- Polling loop ---
@@ -150,10 +256,19 @@
 
     function doPoll() {
         if (!isPolling || !API_BASE) return;
+        if (metaRefreshSec > 0 && metaRefreshSec < 10) {
+            setStatus('paused (meta-refresh)', '#888');
+            setTimeout(function() {
+                detectMetaRefresh();
+                doPoll();
+            }, metaRefreshSec * 1000);
+            return;
+        }
         const fullUrl = location.href;
         const shortUrl = fullUrl.length > 2000 ? fullUrl.slice(0, 2000) + '...' : fullUrl;
         const url = API_BASE + '/api/poll?client_id=' + encodeURIComponent(clientId || '') + '&url=' + encodeURIComponent(shortUrl);
         xhr('GET', url, null, POLL_TIMEOUT_MS, function(resp) {
+            consecutiveErrors = 0;
             try {
                 const msg = JSON.parse(resp.responseText);
                 if (msg.type === 'cmd' && msg.data) {
@@ -166,12 +281,17 @@
                     setStatus('connected', '#0f0');
                 }
             } catch(e) {
-                dbg('Bad poll response');
+                dbg('Bad poll response: ' + (resp.responseText || '').slice(0,200));
             }
             setTimeout(doPoll, 100);
         }, function() {
+            consecutiveErrors++;
             setStatus('disconnected', '#f44');
-            // API might have changed (VPN, sleep/wake) — rediscover after a few failures
+            if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
+                dbg('Too many errors on ' + API_BASE + ' — rediscovering...');
+                API_BASE = null;
+                clientId = null;
+            }
             setTimeout(function() {
                 isPolling = false;
                 discoverAPI(function(base) {
@@ -198,7 +318,7 @@
         const sel = 'a, button, input, textarea, select, [role="button"], [role="link"], [role="tab"], summary, label';
         const els = Array.from(document.querySelectorAll(sel));
         let idx = 1;
-        els.forEach(el => {
+        els.forEach(function(el) {
             const r = el.getBoundingClientRect();
             if (r.width === 0 && r.height === 0) return;
             interactiveMap.set('@e' + idx++, el);
@@ -229,7 +349,7 @@
         }
         const parent = el.parentElement;
         if (parent) {
-            const sibs = Array.from(parent.children).filter(c => c.tagName === el.tagName);
+            const sibs = Array.from(parent.children).filter(function(c) { return c.tagName === el.tagName; });
             if (sibs.length > 1) {
                 const i = sibs.indexOf(el) + 1;
                 return tag + ':nth-of-type(' + i + ')';
@@ -261,20 +381,20 @@
                     sendResult({type: 'result', id, data: q ? summarizeElement(q) : null}); break; }
                 case 'querySelectorAll': {
                     const qa = Array.from(document.querySelectorAll(cmd.selector));
-                    sendResult({type: 'result', id, data: qa.map(e => summarizeElement(e))}); break; }
+                    sendResult({type: 'result', id, data: qa.map(function(e) { return summarizeElement(e); })}); break; }
                 case 'getInteractiveElements': {
                     buildInteractiveMap();
                     const out = [];
-                    interactiveMap.forEach((el, ref) => { const s=summarizeElement(el); s.ref=ref; out.push(s); });
+                    interactiveMap.forEach(function(el, ref) { var s=summarizeElement(el); s.ref=ref; out.push(s); });
                     sendResult({type: 'result', id, data: out}); break; }
                 case 'click': {
                     const c = document.querySelector(cmd.selector);
-                    if (c) { c.scrollIntoView({block:'center'}); setTimeout(()=>{c.click();sendResult({type:'result',id,data:'clicked'});},200); }
+                    if (c) { c.scrollIntoView({block:'center'}); setTimeout(function(){c.click();sendResult({type:'result',id,data:'clicked'});},200); }
                     else sendResult({type:'error',id,message:'element not found'}); break; }
                 case 'clickByRef': {
                     let cr = interactiveMap.get(cmd.ref);
                     if (!cr) { buildInteractiveMap(); cr = interactiveMap.get(cmd.ref); }
-                    if (cr) { cr.scrollIntoView({block:'center'}); setTimeout(()=>{cr.click();sendResult({type:'result',id,data:'clicked '+cmd.ref});},200); }
+                    if (cr) { cr.scrollIntoView({block:'center'}); setTimeout(function(){cr.click();sendResult({type:'result',id,data:'clicked '+cmd.ref});},200); }
                     else sendResult({type:'error',id,message:'ref not found: '+cmd.ref}); break; }
                 case 'type': {
                     const t = document.querySelector(cmd.selector);
@@ -287,7 +407,7 @@
                     } else {
                         if (cmd.clear!==false) t.value='';
                         t.value=(cmd.text||'');
-                        ['input','change','keyup','keydown'].forEach(ev=> t.dispatchEvent(new Event(ev,{bubbles:true})));
+                        ['input','change','keyup','keydown'].forEach(function(ev){ t.dispatchEvent(new Event(ev,{bubbles:true})); });
                     }
                     sendResult({type:'result',id,data:'typed'}); break; }
                 case 'press': {
@@ -295,7 +415,7 @@
                     const k = (cmd.key||'Enter').toLowerCase();
                     const map = {enter:{key:'Enter',code:'Enter',keyCode:13,which:13},tab:{key:'Tab',code:'Tab',keyCode:9,which:9},escape:{key:'Escape',code:'Escape',keyCode:27,which:27},esc:{key:'Escape',code:'Escape',keyCode:27,which:27},arrowdown:{key:'ArrowDown',code:'ArrowDown',keyCode:40,which:40},arrowup:{key:'ArrowUp',code:'ArrowUp',keyCode:38,which:38},arrowleft:{key:'ArrowLeft',code:'ArrowLeft',keyCode:37,which:37},arrowright:{key:'ArrowRight',code:'ArrowRight',keyCode:39,which:39},space:{key:' ',code:'Space',keyCode:32,which:32}};
                     const d = map[k] || {key:cmd.key,code:cmd.key,keyCode:0,which:0};
-                    ['keydown','keypress','keyup'].forEach(typ=> target.dispatchEvent(new KeyboardEvent(typ,{bubbles:true,cancelable:true,key:d.key,code:d.code,keyCode:d.keyCode,which:d.which})));
+                    ['keydown','keypress','keyup'].forEach(function(typ){ target.dispatchEvent(new KeyboardEvent(typ,{bubbles:true,cancelable:true,key:d.key,code:d.code,keyCode:d.keyCode,which:d.which})); });
                     sendResult({type:'result',id,data:'pressed '+cmd.key}); break; }
                 case 'scroll': {
                     const dir = cmd.direction || 'down'; const amt = cmd.amount || 500;
@@ -315,7 +435,7 @@
                     sendResult({type:'result',id,data:payload}); break; }
                 case 'waitForSelector': {
                     const wsSel = cmd.selector; const wsMs = (cmd.timeout||5)*1000; const wsStart = Date.now();
-                    const wsPoll = () => { const wEl=document.querySelector(wsSel); if(wEl)sendResult({type:'result',id,data:{found:true,selector:wsSel}}); else if(Date.now()-wsStart<wsMs)setTimeout(wsPoll,250); else sendResult({type:'result',id,data:{found:false,selector:wsSel,timeout:true}}); };
+                    const wsPoll = function() { const wEl=document.querySelector(wsSel); if(wEl)sendResult({type:'result',id,data:{found:true,selector:wsSel}}); else if(Date.now()-wsStart<wsMs)setTimeout(wsPoll,250); else sendResult({type:'result',id,data:{found:false,selector:wsSel,timeout:true}}); };
                     wsPoll(); break; }
                 case 'focus': {
                     const f = document.querySelector(cmd.selector);
@@ -326,7 +446,7 @@
                     if (gv) sendResult({type:'result',id,data:gv.value}); else sendResult({type:'error',id,message:'element not found'}); break; }
                 case 'setValue': {
                     const sv = document.querySelector(cmd.selector);
-                    if (sv) { sv.value = cmd.value; ['input','change'].forEach(e=> sv.dispatchEvent(new Event(e,{bubbles:true}))); sendResult({type:'result',id,data:'value set'}); }
+                    if (sv) { sv.value = cmd.value; ['input','change'].forEach(function(e){ sv.dispatchEvent(new Event(e,{bubbles:true})); }); sendResult({type:'result',id,data:'value set'}); }
                     else sendResult({type:'error',id,message:'element not found'}); break; }
                 case 'screenshotInfo': {
                     sendResult({type:'result',id,data:{width:window.innerWidth,height:window.innerHeight,scrollX:window.scrollX,scrollY:window.scrollY,url:location.href,devicePixelRatio:window.devicePixelRatio}}); break; }
@@ -342,7 +462,11 @@
     function boot() {
         if (!document.body) { setTimeout(boot, 100); return; }
         createPanel();
+        detectMetaRefresh();
         dbg('CSP-safe bridge loaded on ' + location.href);
+        if (metaRefreshSec > 0) {
+            dbg('Note: page auto-refreshes every ' + metaRefreshSec + 's');
+        }
         setStatus('discovering...', '#fa0');
 
         discoverAPI(function(base) {
@@ -352,7 +476,6 @@
                 setTimeout(boot, RECONNECT_MS);
                 return;
             }
-            // Register and start polling
             const fullUrl = location.href;
             const shortUrl = fullUrl.length > 2000 ? fullUrl.slice(0, 2000) + '...' : fullUrl;
             const url = API_BASE + '/api/poll?url=' + encodeURIComponent(shortUrl);
@@ -376,6 +499,22 @@
             });
         });
     }
+
+    // --- Graceful unload handling ---
+    window.addEventListener('beforeunload', function() {
+        isUnloading = true;
+        if (API_BASE && clientId && gmXHR) {
+            try {
+                gmXHR({
+                    method: 'GET',
+                    url: API_BASE + '/api/poll?client_id=' + encodeURIComponent(clientId) + '&bye=1',
+                    timeout: 500,
+                    onload: function(){},
+                    onerror: function(){}
+                });
+            } catch(e) {}
+        }
+    });
 
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', boot);
