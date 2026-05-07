@@ -8,10 +8,23 @@ Usage:
   ./hermes-bridge-venv/bin/python3 hermes-browser-relay.py
 """
 
-import asyncio, json, time, random
+import asyncio, json, time, random, socket
 from aiohttp import web
 
 PORT = 8765
+
+def get_lan_ips():
+    """Get all non-loopback local IPv4 addresses."""
+    ips = []
+    try:
+        hostname = socket.gethostname()
+        for info in socket.getaddrinfo(hostname, None, socket.AF_INET):
+            ip = info[4][0]
+            if not ip.startswith('127.'):
+                ips.append(ip)
+    except Exception:
+        pass
+    return list(dict.fromkeys(ips))  # dedup
 
 clients = {}  # client_id -> {"queue": [cmds], "last_seen": timestamp, "url": str}
 results = {}  # cmd_id -> response dict
@@ -102,7 +115,10 @@ async def cleanup_task():
 
 async def on_startup(app):
     asyncio.create_task(cleanup_task())
+    ips = get_lan_ips()
     print(f"\n[Hermes Bridge] Running on http://0.0.0.0:{PORT}")
+    for ip in ips:
+        print(f"[Hermes Bridge]             http://{ip}:{PORT}")
     print(f"[Hermes Bridge] Browser poll:   GET  http://localhost:{PORT}/api/poll")
     print(f"[Hermes Bridge] Browser result: POST http://localhost:{PORT}/api/response")
     print(f"[Hermes Bridge] Hermes command: POST http://localhost:{PORT}/api/cmd")

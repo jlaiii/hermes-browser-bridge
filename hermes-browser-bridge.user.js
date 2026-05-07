@@ -1,21 +1,35 @@
 // ==UserScript==
 // @name         Hermes Browser Bridge (CSP-safe)
 // @namespace    http://hermes-agent.local/
-// @version      1.4
-// @description  Remote control bridge for Hermes Agent — uses HTTP short-polling to bypass CSP on strict sites.
+// @version      1.5
+// @description  CSP-safe remote control for any browser tab. HTTP short-polling bridge that bypasses CSP. v1.5: auto-detects relay on page hostname, localhost, and 127.0.0.1.
 // @author       Hermes Agent
 // @match        *://*/*
 // @grant        GM_xmlhttpRequest
 // @grant        GM.xmlHttpRequest
 // @connect      localhost
 // @connect      127.0.0.1
+// @connect      *
 // @run-at       document-start
 // ==/UserScript==
 
 (function() {
     'use strict';
 
-    const API_CANDIDATES = ['http://localhost:8765', 'http://127.0.0.1:8765'];
+    // --- CONFIG: Override with your relay IP if auto-detect fails ---
+    // Set this in Tampermonkey menu or console: window.__HERMES_BRIDGE_API__ = 'http://YOUR_IP:8765';
+    // Or edit the line below:
+    const USER_API = (typeof window !== 'undefined' && window.__HERMES_BRIDGE_API__) || null;
+
+    // Auto-detect: page host first, then localhost, then 127.0.0.1
+    const API_CANDIDATES = USER_API
+        ? [USER_API]
+        : [
+            'http://' + (location.hostname || 'localhost') + ':8765',
+            'http://localhost:8765',
+            'http://' + location.host.split(':')[0] + ':8765',
+            'http://127.0.0.1:8765'
+          ];
     const BOOT_TIMEOUT_MS = 4000;
     const POLL_TIMEOUT_MS = 30000;
     const RECONNECT_MS = 2000;
