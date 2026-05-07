@@ -8,22 +8,36 @@ Usage:
   ./hermes-bridge-venv/bin/python3 hermes-browser-relay.py
 """
 
-import asyncio, json, time, random, socket
+import asyncio, json, time, random, socket, subprocess
 from aiohttp import web
 
 PORT = 8765
 
 def get_lan_ips():
-    """Get all non-loopback local IPv4 addresses."""
+    """Get all non-loopback local IPv4 addresses (WSL-safe)."""
     ips = []
+    # Method 1: ip addr (works on WSL/Linux)
     try:
-        hostname = socket.gethostname()
-        for info in socket.getaddrinfo(hostname, None, socket.AF_INET):
-            ip = info[4][0]
-            if not ip.startswith('127.'):
-                ips.append(ip)
+        out = subprocess.check_output(['ip', 'addr'], text=True, stderr=subprocess.DEVNULL)
+        for line in out.splitlines():
+            if 'inet ' in line and not '127.0.0.1' in line:
+                parts = line.strip().split()
+                if len(parts) >= 2:
+                    ip = parts[1].split('/')[0]
+                    if not ip.startswith('127.'):
+                        ips.append(ip)
     except Exception:
         pass
+    # Method 2: socket fallback
+    if not ips:
+        try:
+            hostname = socket.gethostname()
+            for info in socket.getaddrinfo(hostname, None, socket.AF_INET):
+                ip = info[4][0]
+                if not ip.startswith('127.'):
+                    ips.append(ip)
+        except Exception:
+            pass
     return list(dict.fromkeys(ips))  # dedup
 
 clients = {}  # client_id -> {"queue": [cmds], "last_seen": timestamp, "url": str}

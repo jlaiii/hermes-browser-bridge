@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Hermes Browser Bridge (CSP-safe)
 // @namespace    http://hermes-agent.local/
-// @version      1.5
-// @description  CSP-safe remote control for any browser tab. HTTP short-polling bridge that bypasses CSP. v1.5: auto-detects relay on page hostname, localhost, and 127.0.0.1.
+// @version      1.5.1
+// @description  CSP-safe remote control for any browser tab. HTTP short-polling bridge that bypasses CSP. v1.5.1: fixes URL-too-long crashes.
 // @author       Hermes Agent
 // @match        *://*/*
 // @grant        GM_xmlhttpRequest
@@ -17,9 +17,11 @@
     'use strict';
 
     // --- CONFIG: Override with your relay IP if auto-detect fails ---
-    // Set this in Tampermonkey menu or console: window.__HERMES_BRIDGE_API__ = 'http://YOUR_IP:8765';
-    // Or edit the line below:
-    const USER_API = (typeof window !== 'undefined' && window.__HERMES_BRIDGE_API__) || null;
+    // Set this in browser console: window.__HERMES_BRIDGE_API__ = 'http://YOUR_IP:8765'
+    // Or set localStorage: localStorage.setItem('hermes_bridge_api', 'http://YOUR_IP:8765')
+    const USER_API = (typeof window !== 'undefined' && window.__HERMES_BRIDGE_API__)
+        || (typeof localStorage !== 'undefined' && localStorage.getItem('hermes_bridge_api'))
+        || null;
 
     // Auto-detect: page host first, then localhost, then 127.0.0.1
     const API_CANDIDATES = USER_API
@@ -148,7 +150,9 @@
 
     function doPoll() {
         if (!isPolling || !API_BASE) return;
-        const url = API_BASE + '/api/poll?client_id=' + encodeURIComponent(clientId || '') + '&url=' + encodeURIComponent(location.href);
+        const fullUrl = location.href;
+        const shortUrl = fullUrl.length > 2000 ? fullUrl.slice(0, 2000) + '...' : fullUrl;
+        const url = API_BASE + '/api/poll?client_id=' + encodeURIComponent(clientId || '') + '&url=' + encodeURIComponent(shortUrl);
         xhr('GET', url, null, POLL_TIMEOUT_MS, function(resp) {
             try {
                 const msg = JSON.parse(resp.responseText);
@@ -349,7 +353,9 @@
                 return;
             }
             // Register and start polling
-            const url = API_BASE + '/api/poll?url=' + encodeURIComponent(location.href);
+            const fullUrl = location.href;
+            const shortUrl = fullUrl.length > 2000 ? fullUrl.slice(0, 2000) + '...' : fullUrl;
+            const url = API_BASE + '/api/poll?url=' + encodeURIComponent(shortUrl);
             xhr('GET', url, null, BOOT_TIMEOUT_MS, function(resp) {
                 try {
                     const d = JSON.parse(resp.responseText);
