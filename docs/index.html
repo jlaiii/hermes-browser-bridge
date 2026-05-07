@@ -3,223 +3,282 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>hermes-browser-bridge</title>
+<title>Hermes Browser Bridge — Automate Any Browser Tab</title>
 <style>
-  *, *::before, *::after { box-sizing: border-box; }
-  html { scroll-behavior: smooth; }
-  body {
-    margin: 0;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    background: #0d1117;
-    color: #c9d1d9;
-    line-height: 1.6;
+  *,*::before,*::after{box-sizing:border-box;margin:0}
+  :root{
+    --bg:#050508;--surface:#0e0e12;--surface-2:#16161d;--border:#1e293b;
+    --text:#f8fafc;--text-2:#94a3b8;--accent:#3b82f6;--accent-2:#6366f1;--success:#22c55e;
   }
-  a { color: #58a6ff; text-decoration: none; }
-  a:hover { text-decoration: underline; }
-  code, pre {
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-    font-size: 0.95em;
+  html{scroll-behavior:smooth}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);line-height:1.6;min-height:100vh;
   }
-  .container { max-width: 960px; margin: 0 auto; padding: 0 24px; }
-  header {
-    border-bottom: 1px solid #30363d;
-    padding: 32px 0;
+  a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
+  .container{max-width:1100px;margin:0 auto;padding:0 24px}
+  header{
+    position:fixed;top:0;left:0;right:0;z-index:100;
+    background:rgba(5,5,8,.7);backdrop-filter:blur(20px);border-bottom:1px solid var(--border);
   }
-  header .container { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
-  .brand { font-weight: 700; font-size: 1.25rem; color: #f0f6fc; }
-  nav a { margin-left: 20px; font-size: 0.95rem; }
-  .hero {
-    padding: 80px 0 60px;
-    text-align: center;
+  header .container{align-items:center;padding:14px 0}
+  .logo{font-weight:800;font-size:1.15rem;letter-spacing:-.02em;color:var(--text);display:flex;align-items:center;gap:8px}
+  .logo svg{width:22px;height:22px;color:var(--accent)}
+  nav{display:flex;gap:28px;margin-left:auto;font-size:.92rem}
+  nav a{color:var(--text-2);font-weight:500;transition:color .2s}nav a:hover{color:var(--text);text-decoration:none}
+  .hero{padding:140px 0 80px;text-align:center;position:relative;overflow:hidden}
+  .hero-bg{position:absolute;inset:0;pointer-events:none;opacity:.35}
+  .hero-bg .orb{position:absolute;border-radius:50%;filter:blur(80px)}
+  .orb-1{width:400px;height:400px;background:var(--accent);top:-120px;left:15%;opacity:.2}
+  .orb-2{width:300px;height:300px;background:var(--accent-2);bottom:-80px;right:10%;opacity:.15}
+  .tag{display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:999px;background:var(--surface-2);border:1px solid var(--border);font-size:.82rem;color:var(--text-2);margin-bottom:20px}
+  .tag .dot{width:6px;height:6px;border-radius:50%;background:var(--success);animation:pulse 2s infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+  h1{font-size:clamp(2.4rem,6vw,4rem);line-height:1.1;letter-spacing:-.03em;font-weight:800;max-width:800px;margin:0 auto 20px}
+  .gradient-text{background:linear-gradient(135deg,var(--text) 30%,var(--accent) 70%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+  .lead{font-size:clamp(1.05rem,2.4vw,1.3rem);color:var(--text-2);max-width:640px;margin:0 auto 36px}
+  .btn{display:inline-flex;align-items:center;gap:8px;padding:12px 28px;border-radius:10px;font-size:.95rem;font-weight:600;cursor:pointer;border:none;transition:transform .15s,box-shadow .2s}
+  .btn:hover{transform:translateY(-2px);text-decoration:none}
+  .btn-primary{background:var(--accent);color:#fff;box-shadow:0 4px 20px rgba(59,130,246,.35)}
+  .btn-primary:hover{box-shadow:0 6px 28px rgba(59,130,246,.5)}
+  .btn-secondary{background:var(--surface-2);color:var(--text);border:1px solid var(--border)}
+  .btn-secondary:hover{background:var(--surface)}
+  .cta-group{display:flex;gap:16px;justify-content:center;flex-wrap:wrap}
+
+  /* Bridge SVG */
+  .bridge-wrap{max-width:720px;margin:60px auto 0;position:relative}
+  .bridge-wrap svg{width:100%;height:auto;display:block}
+  .packet{animation:flow 2s linear infinite}
+  .p1{animation-delay:0s}.p2{animation-delay:.66s}.p3{animation-delay:1.33s}
+  @keyframes flow{0%{opacity:0;transform:translateX(-20px)}40%{opacity:1}80%{opacity:1}100%{opacity:0;transform:translateX(20px)}}
+  .glow-line{filter:drop-shadow(0 0 4px var(--accent));opacity:.6;animation:glow 3s ease-in-out infinite}
+  @keyframes glow{0%,100%{opacity:.4}50%{opacity:.8}}
+
+  section{padding:80px 0;position:relative}
+  section:not(:last-of-type){border-bottom:1px solid var(--border)}
+  h2{font-size:clamp(1.6rem,4vw,2.2rem);margin:0 0 12px;font-weight:700;letter-spacing:-.02em}
+  .section-head{color:var(--text-2);max-width:520px;margin-bottom:48px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px}
+  .card{
+    background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:28px;
+    transition:transform .2s,border-color .2s,box-shadow .3s;
   }
-  .hero h1 {
-    font-size: clamp(2rem, 5vw, 3rem);
-    margin: 0 0 16px;
-    color: #f0f6fc;
-    letter-spacing: -0.02em;
+  .card:hover{transform:translateY(-4px);border-color:var(--accent);box-shadow:0 12px 40px rgba(59,130,246,.1)}
+  .card h3{font-size:1.05rem;margin:0 0 10px;color:var(--text)}
+  .card p{font-size:.9rem;color:var(--text-2);line-height:1.55}
+  .icon{width:40px;height:40px;border-radius:10px;background:var(--surface-2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;margin-bottom:16px;color:var(--accent)}
+  .icon svg{width:20px;height:20px}
+
+  .code-block{
+    background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:20px 24px;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,Liberation Mono,"Courier New",monospace;font-size:.87rem;overflow-x:auto;color:#c9d1d9
   }
-  .hero p.lead {
-    font-size: clamp(1rem, 2.6vw, 1.25rem);
-    max-width: 700px;
-    margin: 0 auto 32px;
-    color: #8b949e;
+  .code-block .line{display:block;margin:2px 0}.prompt{color:var(--accent-2);font-weight:600;margin-right:8px}
+  .comment{color:#6b7280}
+
+  .arch-flow{display:flex;align-items:center;justify-content:center;gap:24px;flex-wrap:wrap;margin-top:36px}
+  .arch-node{text-align:center;padding:20px 24px;background:var(--surface);border:1px solid var(--border);border-radius:14px;min-width:160px}
+  .arch-node .icon2{font-size:1.6rem;margin-bottom:6px}.arch-node strong{font-size:.92rem}
+  .arch-node small{display:block;color:var(--text-2);font-size:.8rem;margin-top:2px}
+  .arch-arrow{color:var(--accent);font-size:1.4rem;line-height:1}
+
+  footer{text-align:center;padding:40px 0 60px;color:var(--text-2);font-size:.88rem}
+  footer a{color:var(--text-2)}footer a:hover{color:var(--text)}
+  .badge{display:inline-flex;gap:6px;padding:4px 10px;border-radius:999px;font-size:.72rem;font-weight:700;background:var(--success);color:#fff;vertical-align:middle;margin-right:6px}
+
+  @media(max-width:640px){
+    .hero{padding:120px 0 60px}
+    nav{display:none}
+    .arch-flow{flex-direction:column}
+    .arch-arrow{transform:rotate(90deg)}
   }
-  .btn {
-    display: inline-block;
-    padding: 12px 24px;
-    border-radius: 8px;
-    font-weight: 600;
-    font-size: 0.95rem;
-    transition: transform .15s ease, box-shadow .2s ease;
-  }
-  .btn-primary { background: #58a6ff; color: #0d1117; }
-  .btn-secondary { background: #21262d; color: #c9d1d9; border: 1px solid #30363d; }
-  .btn:hover { transform: translateY(-1px); text-decoration: none; }
-  section { padding: 60px 0; }
-  section + section { border-top: 1px solid #21262d; }
-  h2 { font-size: 1.75rem; margin: 0 0 18px; color: #f0f6fc; }
-  .features { display: grid; grid-template-columns: repeat(auto-fit,minmax(260px,1fr)); gap: 20px; }
-  .feature {
-    background: #161b22;
-    border: 1px solid #30363d;
-    border-radius: 12px;
-    padding: 24px;
-  }
-  .feature h3 { margin: 0 0 10px; font-size: 1.1rem; color: #f0f6fc; }
-  .feature p { margin: 0; color: #8b949e; }
-  .install-steps { background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 24px; }
-  .install-steps ol { padding-left: 20px; margin: 0; }
-  .install-steps li { margin-bottom: 14px; }
-  .install-steps code {
-    background: #0d1117;
-    border: 1px solid #30363d;
-    padding: 2px 6px;
-    border-radius: 6px;
-    color: #58a6ff;
-  }
-  .arch-diagram {
-    background: #161b22;
-    border: 1px solid #30363d;
-    border-radius: 12px;
-    padding: 24px;
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-    color: #8b949e;
-    overflow-x: auto;
-    white-space: pre;
-    line-height: 1.5;
-  }
-  .arch-diagram span { color: #f0f6fc; }
-  .arch-diagram .accent { color: #58a6ff; }
-  table { width: 100%; border-collapse: collapse; margin-top: 8px; }
-  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid #21262d; }
-  th { color: #f0f6fc; font-weight: 600; }
-  td code { background: #0d1117; border: 1px solid #30363d; padding: 2px 6px; border-radius: 6px; color: #58a6ff; }
-  footer { text-align: center; padding: 40px 0 60px; color: #8b949e; font-size: 0.9rem; }
-  .badge { display: inline-block; padding: 4px 10px; border-radius: 999px; font-size: 0.8rem; font-weight: 600; background: #238636; color: #fff; margin-right: 6px; }
 </style>
 </head>
 <body>
 
 <header>
-  <div class="container">
-    <div class="brand">hermes-browser-bridge</div>
+  <div class="container" style="display:flex">
+    <a href="index.html" class="logo">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="6 9 12 3 18 9"/><polyline points="6 15 12 21 18 15"/><line x1="12" y1="3" x2="12" y2="21"/>
+      </svg>
+      Hermes Browser Bridge
+    </a>
     <nav>
       <a href="index.html">Home</a>
       <a href="install.html">Install</a>
       <a href="about.html">About</a>
-      <a href="https://github.com/jlaiii/hermes-browser-bridge">GitHub</a>
+      <a href="https://github.com/jlaiii/hermes-browser-bridge" target="_blank" rel="noopener">GitHub</a>
     </nav>
   </div>
 </header>
 
 <section class="hero">
+  <div class="hero-bg"><div class="orb orb-1"></div><div class="orb orb-2"></div></div>
   <div class="container">
-    <h1>Automate the browser without breaking CSP</h1>
+    <div class="tag"><span class="dot"></span> CSP-safe browser automation</div>
+    <h1>Remote control any browser tab, <span class="gradient-text">even on locked-down sites.</span></h1>
     <p class="lead">
-      A lightweight, CSP-safe browser automation bridge. Use HTTP short-polling via Tampermonkey's <code>GM_xmlhttpRequest</code> and a localhost relay to control pages like ChatGPT, GitHub, LinkedIn, and eBay.
+      Hermes Browser Bridge automates ChatGPT, GitHub, LinkedIn, eBay, and more —
+      using Tampermonkey + HTTP short-polling so Content-Security-Policy can’t block you.
     </p>
-    <a class="btn btn-primary" href="install.html">Get Started</a>
-    <a class="btn btn-secondary" href="https://github.com/jlaiii/hermes-browser-bridge">View on GitHub</a>
+    <div class="cta-group">
+      <a href="install.html" class="btn btn-primary">Get Started →</a>
+      <a href="https://github.com/jlaiii/hermes-browser-bridge" class="btn btn-secondary" target="_blank" rel="noopener">⭐ Star on GitHub</a>
+    </div>
+
+    <div class="bridge-wrap">
+      <svg viewBox="0 0 600 220" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="g1" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="#3b82f6" stop-opacity=".35"/><stop offset="50%" stop-color="#3b82f6" stop-opacity=".75"/><stop offset="100%" stop-color="#6366f1" stop-opacity=".35"/></linearGradient>
+        </defs>
+        <rect x="20" y="40" width="130" height="130" rx="14" fill="none" stroke="#1e293b" stroke-width="1.5"/>
+        <text x="85" y="70" text-anchor="middle" font-size="9" fill="#94a3b8" font-family="monospace">Hermes Agent</text>
+        <rect x="50" y="82" width="70" height="30" rx="4" fill="#0e0e12" stroke="#1e293b" stroke-width="1"/>
+        <text x="85" y="101" text-anchor="middle" font-size="8" fill="#f8fafc" font-family="monospace">$ hermes</text>
+        <rect x="60" y="120" width="50" height="8" rx="2" fill="#0e0e12" stroke="#6366f1" stroke-width=".5"/>
+        <rect x="60" y="132" width="50" height="8" rx="2" fill="#0e0e12" stroke="#3b82f6" stroke-width=".5"/>
+        <rect x="60" y="144" width="30" height="8" rx="2" fill="#0e0e12" stroke="#22c55e" stroke-width=".5"/>
+
+        <rect x="450" y="40" width="130" height="130" rx="14" fill="none" stroke="#1e293b" stroke-width="1.5"/>
+        <text x="515" y="70" text-anchor="middle" font-size="9" fill="#94a3b8" font-family="monospace">Browser Tab</text>
+        <rect x="470" y="82" width="90" height="14" rx="3" fill="#0e0e12" stroke="#1e293b"/>
+        <rect x="470" y="100" width="90" height="50" rx="3" fill="#0e0e12" stroke="#1e293b"/>
+        <rect x="476" y="108" width="40" height="6" rx="1.5" fill="#1e293b"/>
+        <rect x="476" y="120" width="78" height="6" rx="1.5" fill="#1e293b"/>
+        <rect x="476" y="132" width="60" height="6" rx="1.5" fill="#1e293b"/>
+
+        <path d="M150 110 L450 110" stroke="url(#g1)" stroke-width="3" fill="none" stroke-linecap="round" class="glow-line"/>
+
+        <circle cx="0" cy="110" r="5" fill="#3b82f6" class="packet p1"><animate attributeName="cx" values="150;450" dur="2s" repeatCount="indefinite"/></circle>
+        <circle cx="0" cy="110" r="5" fill="#6366f1" class="packet p2"><animate attributeName="cx" values="150;450" dur="2s" begin=".66s" repeatCount="indefinite"/></circle>
+        <circle cx="0" cy="110" r="5" fill="#22c55e" class="packet p3"><animate attributeName="cx" values="450;150" dur="2s" begin=".33s" repeatCount="indefinite"/></circle>
+
+        <rect x="235" y="95" width="130" height="30" rx="6" fill="#0e0e12" stroke="#3b82f6" stroke-width="1"/>
+        <text x="300" y="115" text-anchor="middle" font-size="9" fill="#3b82f6" font-family="monospace" font-weight="600">HTTP Relay :8765</text>
+      </svg>
+    </div>
   </div>
 </section>
 
-<section id="features">
+<section>
   <div class="container">
     <h2>Features</h2>
-    <div class="features">
-      <div class="feature">
-        <h3>CSP-Safe</h3>
-        <p>Works inside strict Content-Security-Policy environments where traditional injection fails.</p>
+    <p class="section-head">Everything a browser automation bridge needs to work in the real world.</p>
+    <div class="grid">
+      <div class="card">
+        <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div>
+        <h3>CSP Safe</h3>
+        <p>WebSocket-based tools fail on GitHub, LinkedIn, and Twitter. We use HTTP short-polling via GM_xmlhttpRequest — no CSP can block it.</p>
       </div>
-      <div class="feature">
+      <div class="card">
+        <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20V10M18 20V4M6 20v-4"/></svg></div>
         <h3>Tampermonkey Native</h3>
-        <p>Leverages <code>GM_xmlhttpRequest</code> for reliable cross-origin outbound requests.</p>
+        <p>Runs as a userscript — auto-installs on every page. No browser extensions to package. No store approval waits.</p>
       </div>
-      <div class="feature">
-        <h3>Localhost Relay</h3>
-        <p>A tiny local relay server bridges your automation scripts to the browser.</p>
+      <div class="card">
+        <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg></div>
+        <h3>Local Relay</h3>
+        <p>Tiny aiohttp relay server on localhost:8765. No cloud dependency. No subscriptions. Your browser stays yours.</p>
       </div>
-      <div class="feature">
+      <div class="card">
+        <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg></div>
         <h3>Site Agnostic</h3>
-        <p>Supports ChatGPT, GitHub, LinkedIn, eBay, and any other site with a Tampermonkey context.</p>
+        <p>Tested on ChatGPT, GitHub, LinkedIn, eBay, Twitter/X. If Tampermonkey runs on it, the bridge controls it.</p>
       </div>
-      <div class="feature">
-        <h3>Short-Polling</h3>
-        <p>Simple HTTP short-polling design; no WebSockets, no extra ports, no headaches.</p>
+      <div class="card">
+        <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><polyline points="23 20 23 14 17 14"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg></div>
+        <h3>Auto-Reconnect</h3>
+        <p>Refresh a tab? Bridge turns green again in under 2 seconds. Move between pages? It follows. Network blip? It retries.</p>
       </div>
-      <div class="feature">
-        <h3>Zero External Deps</h3>
-        <p>The userscript and relay are self-contained with no third-party dependencies.</p>
+      <div class="card">
+        <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg></div>
+        <h3>Multi-Tab Control</h3>
+        <p>Every tab becomes its own client. Send a message to ChatGPT while scraping eBay — all from one relay.</p>
       </div>
     </div>
-  </div>
-</section>
-
-<section id="install">
-  <div class="container">
-    <h2>Quick Install</h2>
-    <div class="install-steps">
-      <ol>
-        <li><strong>Install the relay</strong> — clone the repo and start the relay server:<br><code>git clone https://github.com/jlaiii/hermes-browser-bridge.git<br>cd hermes-browser-bridge && python relay.py</code></li>
-        <li><strong>Install the userscript</strong> — copy the script into Tampermonkey (or Greasemonkey). It runs on target sites and polls <code>http://localhost:8080</code> by default.</li>
-        <li><strong>Automate</strong> — send commands to the relay via HTTP; the userscript executes them in the browser and returns results.</li>
-      </ol>
-    </div>
-    <p style="margin-top: 16px;">See the <a href="install.html">full install guide</a> for platform-specific copy-paste commands.</p>
   </div>
 </section>
 
 <section id="architecture">
   <div class="container">
-    <h2>Architecture</h2>
-    <div class="arch-diagram">
-  +---------------------+        HTTP POST/GET        +---------------------+
-  |   Your automation   | &lt;------------------------&gt; |   <span class="accent">localhost relay</span>   |
-  |   script / CLI      |                            |   (e.g. port 8080)   |
-  +---------------------+                            +----------+----------+
-                                                             |
-                                                             | fetch
-                                                             |
-                                                    +--------v---------+
-                                                    |  <span>Target page</span>    |
-                                                    |  (Tampermonkey)  |
-                                                    |  <span class="accent">GM_xmlhttpRequest</span> |
-                                                    +--------+---------+
-                                                             |
-                                                    +--------v---------+
-                                                    |   <span>Browser DOM</span>   |
-                                                    |  Click / Type /  |
-                                                    |  Read / Navigate   |
-                                                    +------------------+
+    <h2>How It Works</h2>
+    <p class="section-head">Three moving parts. Zero external dependencies after install.</p>
+    <div class="arch-flow">
+      <div class="arch-node">
+        <div class="icon2">🖥️</div>
+        <strong>Your Script</strong>
+        <small>Python / Curl / CLI</small>
+      </div>
+      <div class="arch-arrow">→</div>
+      <div class="arch-node">
+        <div class="icon2">⚡</div>
+        <strong>Relay</strong>
+        <small>localhost:8765</small>
+      </div>
+      <div class="arch-arrow">→</div>
+      <div class="arch-node">
+        <div class="icon2">🌐</div>
+        <strong>Userscript</strong>
+        <small>Tampermonkey</small>
+      </div>
     </div>
+
+    <div class="code-block" style="margin-top:36px">
+<span class="line"><span class="prompt">$</span> python3 hermes-browser-relay.py</span>
+<span class="line comment"># [Hermes Bridge] Running on http://0.0.0.0:8765</span>
+<span class="line"><span class="prompt">$</span> curl -s http://localhost:8765/api/clients</span>
+<span class="line comment"># { "clients": [ { "id": "...", "url": "https://chatgpt.com" } ] }</span>
+<span class="line"><span class="prompt">$</span> curl -s -X POST http://localhost:8765/api/cmd </span>
+<span class="line">  -H "Content-Type: application/json" </span>
+<span class="line">  -d '{"action":"getInfo"}'</span>
+<span class="line comment"># { "type": "result", "data": { "url": "https://chatgpt.com" } }</span>
+    </div>
+  </div>
+</section>
+
+<section id="quickstart">
+  <div class="container">
+    <h2>Quick Start</h2>
+    <p class="section-head">From zero to controlling a live tab in under 60 seconds.</p>
+    <ol style="padding-left:20px;color:var(--text-2);font-size:.95rem;line-height:2">
+      <li>Install <a href="https://www.tampermonkey.net/" target="_blank" rel="noopener">Tampermonkey</a> on Firefox, Chrome, or Edge.</li>
+      <li><a href="https://github.com/jlaiii/hermes-browser-bridge/raw/master/hermes-browser-bridge.user.js" target="_blank" rel="noopener">Click here to install the userscript</a>. A panel appears on every page.</li>
+      <li>Download and start the relay:</div>
+    </ol>
+    <div class="code-block" style="margin-top:12px">
+<span class="line"><span class="prompt">$</span> git clone https://github.com/jlaiii/hermes-browser-bridge.git</span>
+<span class="line"><span class="prompt">$</span> cd hermes-browser-bridge</span>
+<span class="line"><span class="prompt">$</span> pip install aiohttp &amp;&amp; python hermes-browser-relay.py</span>
+    </div>
+    <p style="margin-top:18px;color:var(--text-2);font-size:.95rem">Open any website. Watch the panel turn <span style="color:var(--success);font-weight:700">green</span>. You're connected. See the <a href="install.html">full install guide</a>.</p>
   </div>
 </section>
 
 <section id="commands">
   <div class="container">
-    <h2>Command Reference</h2>
-    <p>Send these JSON payloads to the relay. All responses are returned via the short-poll loop.</p>
-    <table>
-      <thead>
-        <tr><th>Command</th><th>Payload</th><th>Description</th></tr>
-      </thead>
-      <tbody>
-        <tr><td><code>click</code></td><td><code>{"cmd":"click","selector":"#btn"}</code></td><td>Click a DOM element.</td></tr>
-        <tr><td><code>type</code></td><td><code>{"cmd":"type","selector":"#input","text":"hello"}</code></td><td>Type text into an input.</td></tr>
-        <tr><td><code>read</code></td><td><code>{"cmd":"read","selector":".content"}</code></td><td>Read innerText from an element.</td></tr>
-        <tr><td><code>navigate</code></td><td><code>{"cmd":"navigate","url":"/page"}</code></td><td>Change <code>window.location</code>.</td></tr>
-        <tr><td><code>eval</code></td><td><code>{"cmd":"eval","js":"document.title"}</code></td><td>Run arbitrary JS in page context.</td></tr>
-      </tbody>
-    </table>
+    <h2>What You Can Do</h2>
+    <p class="section-head">Click elements, type text, navigate pages, read data, run JavaScript.</p>
+
+    <div class="grid" style="margin-top:36px">
+      <div class="card">
+        <h3>ChatGPT</h3>
+        <p>Type into contenteditable prompts and press Enter — works even when standard textarea selectors miss.</p>
+      </div>
+      <div class="card">
+        <h3>eBay Purchases</h3>
+        <p>Navigate to purchase history and extract order details, prices, tracking status, and return windows.</p>
+      </div>
+      <div class="card">
+        <h3>GitHub Repos</h3>
+        <p>Read repo pages, list commits, extract metadata. CSP blocks WebSockets here but not the bridge.</p>
+      </div>
+    </div>
   </div>
 </section>
 
 <footer>
   <div class="container">
-    <p>
-      <span class="badge">Open Source</span>
-      <a href="https://github.com/jlaiii/hermes-browser-bridge">github.com/jlaiii/hermes-browser-bridge</a>
-    </p>
+    <p><span class="badge">Open Source</span> Hermes Browser Bridge — <a href="https://jlaiii.github.io/hermes-browser-bridge/">Site</a> · <a href="https://github.com/jlaiii/hermes-browser-bridge">GitHub</a> · <a href="install.html">Install</a> · <a href="about.html">About</a></p>
   </div>
 </footer>
 

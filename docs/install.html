@@ -3,165 +3,225 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Install — hermes-browser-bridge</title>
+<title>Install — Hermes Browser Bridge</title>
 <style>
-  *, *::before, *::after { box-sizing: border-box; }
-  body {
-    margin: 0;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    background: #0d1117;
-    color: #c9d1d9;
-    line-height: 1.6;
+  *,*::before,*::after{box-sizing:border-box;margin:0}
+  :root{
+    --bg:#050508;--surface:#0e0e12;--surface-2:#16161d;--border:#1e293b;
+    --text:#f8fafc;--text-2:#94a3b8;--accent:#3b82f6;--accent-2:#6366f1;--success:#22c55e;
   }
-  a { color: #58a6ff; text-decoration: none; }
-  a:hover { text-decoration: underline; }
-  code, pre {
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-    font-size: 0.95em;
+  html{scroll-behavior:smooth}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);line-height:1.6;min-height:100vh;
   }
-  .container { max-width: 960px; margin: 0 auto; padding: 0 24px; }
-  header {
-    border-bottom: 1px solid #30363d;
-    padding: 32px 0;
+  a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
+  .container{max-width:1100px;margin:0 auto;padding:0 24px}
+  header{
+    position:fixed;top:0;left:0;right:0;z-index:100;
+    background:rgba(5,5,8,.7);backdrop-filter:blur(20px);border-bottom:1px solid var(--border);
   }
-  header .container { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
-  .brand { font-weight: 700; font-size: 1.25rem; color: #f0f6fc; }
-  nav a { margin-left: 20px; font-size: 0.95rem; }
-  h1 { font-size: clamp(1.6rem, 4vw, 2.2rem); margin: 0 0 8px; color: #f0f6fc; }
-  .subtitle { color: #8b949e; margin-bottom: 32px; }
-  section { padding: 40px 0; }
-  section + section { border-top: 1px solid #21262d; }
-  h2 { font-size: 1.35rem; margin: 0 0 14px; color: #f0f6fc; }
-  .step { background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 24px; margin-bottom: 20px; }
-  .step h3 { margin: 0 0 10px; font-size: 1.05rem; color: #f0f6fc; }
-  .step p { margin: 0 0 14px; color: #8b949e; }
-  .snip {
-    background: #0d1117;
-    border: 1px solid #30363d;
-    border-radius: 10px;
-    padding: 16px 20px;
-    overflow-x: auto;
-    white-space: pre;
-    line-height: 1.55;
-    color: #c9d1d9;
+  header .container{display:flex;align-items:center;padding:14px 0}
+  .logo{font-weight:800;font-size:1.15rem;letter-spacing:-.02em;color:var(--text);display:flex;align-items:center;gap:8px}
+  .logo svg{width:22px;height:22px;color:var(--accent)}
+  nav{display:flex;gap:28px;margin-left:auto;font-size:.92rem}
+  nav a{color:var(--text-2);font-weight:500;transition:color .2s}nav a:hover{color:var(--text);text-decoration:none}
+  .hero{padding:120px 0 40px;text-align:center}
+  h1{font-size:clamp(2rem,5vw,3rem);line-height:1.1;letter-spacing:-.03em;font-weight:800;margin:0 0 12px}
+  .lead{color:var(--text-2);max-width:560px;margin:0 auto}
+
+  /* Tabs */
+  .tabs{display:flex;gap:8px;justify-content:center;margin:48px 0 24px}
+  .tab{padding:10px 24px;border-radius:999px;font-size:.9rem;font-weight:600;background:var(--surface);border:1px solid var(--border);color:var(--text-2);cursor:pointer;transition:all .2s}
+  .tab.active{background:var(--accent);color:#fff;border-color:var(--accent);box-shadow:0 4px 16px rgba(59,130,246,.3)}
+  .tab:hover:not(.active){border-color:var(--text-2)}
+  .tab-panel{display:none;margin-bottom:60px}
+  .tab-panel.active{display:block}
+
+  .step-card{
+    background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:32px;margin-bottom:24px;
   }
-  .snip code { font-size: 0.92em; color: #a5d6ff; }
-  .tabs { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
-  .tab {
-    padding: 6px 14px;
-    border-radius: 6px;
-    font-size: 0.85rem;
-    font-weight: 600;
-    cursor: pointer;
-    background: #21262d;
-    border: 1px solid #30363d;
-    color: #c9d1d9;
-    user-select: none;
+  .step-card .num{
+    display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:50%;
+    background:var(--accent);color:#fff;font-size:.85rem;font-weight:700;margin-bottom:18px;
   }
-  .tab.active { background: #58a6ff; color: #0d1117; border-color: #58a6ff; }
-  .platform-block { display: none; }
-  .platform-block.active { display: block; }
-  .btn {
-    display: inline-block;
-    padding: 10px 20px;
-    border-radius: 8px;
-    font-weight: 600;
-    font-size: 0.95rem;
-    transition: transform .15s ease, box-shadow .2s ease;
+  .step-card h3{font-size:1.15rem;margin:0 0 10px}
+  .step-card p{color:var(--text-2);font-size:.95rem;margin:0 0 16px}
+
+  .code-block{
+    background:var(--surface-2);border:1px solid var(--border);border-radius:12px;padding:16px 20px;
+    font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,Liberation Mono,"Courier New",monospace;
+    font-size:.85rem;overflow-x:auto;color:#c9d1d9;position:relative;margin-bottom:12px
   }
-  .btn-primary { background: #58a6ff; color: #0d1117; }
-  .btn-secondary { background: #21262d; color: #c9d1d9; border: 1px solid #30363d; }
-  .btn:hover { transform: translateY(-1px); text-decoration: none; }
-  footer { text-align: center; padding: 40px 0 60px; color: #8b949e; font-size: 0.9rem; }
+  .code-block code{color:inherit;background:none;padding:0}
+  .copy{
+    position:absolute;top:10px;right:10px;padding:4px 10px;border-radius:6px;font-size:.75rem;font-weight:600;
+    background:var(--surface);border:1px solid var(--border);color:var(--text-2);cursor:pointer;transition:all .15s;
+  }
+  .copy:hover{background:var(--accent);color:#fff;border-color:var(--accent)}
+
+  .note{
+    display:flex;gap:12px;align-items:flex-start;padding:16px 20px;border-radius:12px;
+    background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.2);margin-top:12px;
+  }
+  .note-icon{font-size:1.2rem}
+  .note p{margin:0;color:var(--text-2);font-size:.9rem}
+
+  footer{text-align:center;padding:40px 0 60px;color:var(--text-2);font-size:.88rem;border-top:1px solid var(--border)}
+  footer a{color:var(--text-2)}footer a:hover{color:var(--text)}
+  .badge{display:inline-flex;gap:6px;padding:4px 10px;border-radius:999px;font-size:.72rem;font-weight:700;background:var(--success);color:#fff;vertical-align:middle;margin-right:6px}
+
+  @media(max-width:640px){.tabs{flex-wrap:wrap}nav{display:none}}
 </style>
 </head>
 <body>
 
 <header>
   <div class="container">
-    <div class="brand">hermes-browser-bridge</div>
+    <a href="index.html" class="logo">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="6 9 12 3 18 9"/><polyline points="6 15 12 21 18 15"/><line x1="12" y1="3" x2="12" y2="21"/>
+      </svg>
+      Hermes Browser Bridge
+    </a>
     <nav>
       <a href="index.html">Home</a>
       <a href="install.html">Install</a>
       <a href="about.html">About</a>
-      <a href="https://github.com/jlaiii/hermes-browser-bridge">GitHub</a>
+      <a href="https://github.com/jlaiii/hermes-browser-bridge" target="_blank" rel="noopener">GitHub</a>
     </nav>
   </div>
 </header>
 
+<section class="hero">
+  <div class="container">
+    <h1>Install</h1>
+    <p class="lead">Two pieces: a relay server on your machine, and a userscript in your browser.</p>
+  </div>
+</section>
+
 <div class="container">
-  <section>
-    <h1>Install hermes-browser-bridge</h1>
-    <p class="subtitle">Two parts: the userscript (browser) and the relay (localhost). Pick your OS below for exact copy-paste commands.</p>
+  <div class="tabs">
+    <button class="tab active" data-tab="linux">🐧 Linux / Mac</button>
+    <button class="tab" data-tab="win">🪟 Windows</button>
+  </div>
 
-    <div class="step">
-      <h3>1. Clone the repository</h3>
-      <p>All platforms use the same repo:</p>
-      <div class="snip"><code>git clone https://github.com/jlaiii/hermes-browser-bridge.git<br>cd hermes-browser-bridge</code></div>
-    </div>
-
-    <div class="step">
-      <h3>2. Start the relay</h3>
-      <p>Choose your platform to see the right command.</p>
-      <div class="tabs">
-        <span class="tab active" data-target="linux">Linux</span>
-        <span class="tab" data-target="mac">macOS</span>
-        <span class="tab" data-target="win">Windows</span>
+  <div class="tab-panel active" id="linux">
+    <div class="step-card">
+      <div class="num">1</div>
+      <h3>Clone &amp; Install</h3>
+      <p>Clone the repo and start the relay. Python 3.8+ required.</p>
+      <div class="code-block">
+<pre><code>git clone https://github.com/jlaiii/hermes-browser-bridge.git
+cd hermes-browser-bridge
+python3 -m venv venv
+source venv/bin/activate
+pip install aiohttp
+python3 hermes-browser-relay.py
+</code></pre>
+        <button class="copy" onclick="copy(this)">Copy</button>
       </div>
-      <div id="linux" class="platform-block active">
-        <div class="snip"><code># Ensure Python 3 is installed, then start the relay<br>python3 relay.py</code></div>
-      </div>
-      <div id="mac" class="platform-block">
-        <div class="snip"><code># macOS ships with Python 3 since Catalina; start directly<br>python3 relay.py</code></div>
-      </div>
-      <div id="win" class="platform-block">
-        <div class="snip"><code># In Command Prompt or PowerShell, run the relay<br>python relay.py</code></div>
+      <div class="note">
+        <span class="note-icon">ℹ️</span>
+        <p>The relay listens on <code>http://0.0.0.0:8765</code>. Leave this terminal open while you use the bridge.</p>
       </div>
     </div>
 
-    <div class="step">
-      <h3>3. Install the Tampermonkey userscript</h3>
-      <p>The userscript polls the relay and executes commands in the browser.</p>
-      <ol>
-        <li>Install <a href="https://www.tampermonkey.net/">Tampermonkey</a> for your browser.</li>
-        <li>Open Tampermonkey Dashboard → Utilities → Import from file.</li>
-        <li>Select <code>hermes-browser-bridge.user.js</code> (inside the cloned repo).</li>
-        <li>Save and enable the script for the sites you want to automate.</li>
-      </ol>
-      <p style="margin-top:10px;">Alternatively, create a new script and paste the contents of <code>hermes-browser-bridge.user.js</code> directly.</p>
+    <div class="step-card">
+      <div class="num">2</div>
+      <h3>Install Tampermonkey</h3>
+      <p>Install the extension for your browser.</p>
+      <p style="margin-top:8px"><a href="https://addons.mozilla.org/en-US/firefox/addon/tampermonkey/">Firefox</a> · <a href="https://chrome.google.com/webstore/detail/tampermonkey/dhdgffkkebhmkfjojejmpbldmpobfkfo">Chrome</a> · <a href="https://microsoftedge.microsoft.com/addons/detail/tampermonkey/iikmkjmpaadaobahmlepeloendndfphd">Edge</a></p>
     </div>
 
-    <div class="step">
-      <h3>4. Verify it works</h3>
-      <p>Send a test ping and read the page title:</p>
-      <div class="snip"><code>curl -X POST http://localhost:8080/api/command \<br>  -H "Content-Type: application/json" \<br>  -d '{"cmd":"eval","js":"document.title"}'</code></div>
-      <p>You should see the current page title returned in JSON.</p>
+    <div class="step-card">
+      <div class="num">3</div>
+      <h3>Install the Userscript</h3>
+      <p>Add the bridge userscript to Tampermonkey.</p>
+      <p style="margin-top:8px"><a href="https://github.com/jlaiii/hermes-browser-bridge/raw/master/hermes-browser-bridge.user.js" class="btn" target="_blank" rel="noopener">📜 Install Script</a></p>
+      <p style="margin-top:12px;color:var(--text-2);font-size:.9rem">Or manually: copy <code>hermes-browser-bridge.user.js</code> into a new Tampermonkey script.</p>
+    </div>
+  </div>
+
+  <div class="tab-panel" id="win">
+    <div class="step-card">
+      <div class="num">1</div>
+      <h3>Download &amp; Install</h3>
+      <p>Download the repo, set up a venv, install deps, and run the relay.</p>
+      <div class="code-block">
+<pre><code>git clone https://github.com/jlaiii/hermes-browser-bridge.git
+cd hermes-browser-bridge
+python -m venv venv
+venv\Scripts\activate
+pip install aiohttp
+python hermes-browser-relay.py
+</code></pre>
+        <button class="copy" onclick="copy(this)">Copy</button>
+      </div>
+      <div class="note">
+        <span class="note-icon">ℹ️</span>
+        <p>If Python is not installed, get it from the Windows Store or <a href="https://www.python.org/downloads/windows/">python.org</a>.</p>
+      </div>
     </div>
 
-    <div style="text-align:center; margin-top: 24px;">
-      <a class="btn btn-secondary" href="index.html">&larr; Back to home</a>
-      <a class="btn btn-primary" href="https://github.com/jlaiii/hermes-browser-bridge">Open GitHub Repo</a>
+    <div class="step-card">
+      <div class="num">2</div>
+      <h3>Install Tampermonkey</h3>
+      <p>Get the extension for your browser.</p>
+      <p style="margin-top:8px"><a href="https://addons.mozilla.org/en-US/firefox/addon/tampermonkey/">Firefox</a> · <a href="https://chrome.google.com/webstore/detail/tampermonkey/dhdgffkkebhmkfjojejmpbldmpobfkfo">Chrome</a> · <a href="https://microsoftedge.microsoft.com/addons/detail/tampermonkey/iikmkjmpaadaobahmlepeloendndfphd">Edge</a></p>
     </div>
-  </section>
+
+    <div class="step-card">
+      <div class="num">3</div>
+      <h3>Install the Userscript</h3>
+      <p>Add the bridge userscript to Tampermonkey.</p>
+      <p style="margin-top:8px"><a href="https://github.com/jlaiii/hermes-browser-bridge/raw/master/hermes-browser-bridge.user.js" class="btn" target="_blank" rel="noopener">📜 Install Script</a></p>
+    </div>
+  </div>
+
+  <div class="step-card">
+    <div class="num" style="background:var(--success)">✓</div>
+    <h3>Verify It Works</h3>
+    <p>Open any page in your browser. Look for the <strong>Hermes Bridge</strong> panel in the bottom-right.</p>
+    <div class="code-block">
+<pre><code>curl -s http://localhost:8765/api/ping
+# {"ok": true, "ts": 1234567890.0}
+curl -s http://localhost:8765/api/clients
+# {"clients": [{"id": "...", "url": "https://chatgpt.com"}]}
+</code></pre>
+    </button class="copy" onclick="copy(this)">Copy</button>
+    </div>
+    <p style="margin-top:12px;color:var(--text-2);font-size:.9rem">Green status = connected. Start sending commands!</p>
+  </div>
 </div>
+
+<script>
+  // Simple tab switcher
+  document.querySelectorAll('.tab').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById(btn.dataset.tab).classList.add('active');
+    });
+  });
+  function copy(btn) {
+    const code = btn.parentElement.querySelector('code');
+    if (!code) return;
+    navigator.clipboard.writeText(code.innerText).then(() => {
+      const orig = btn.innerText;
+      btn.innerText = 'Copied';
+      btn.style.background = 'var(--success)';
+      setTimeout(() => { btn.innerText = orig; btn.style.background = ''; }, 1500);
+    });
+  }
+</script>
 
 <footer>
   <div class="container">
-    <p>hermes-browser-bridge — <a href="https://github.com/jlaiii/hermes-browser-bridge">GitHub</a></p>
+    <p><span class="badge">Open Source</span> Hermes Browser Bridge — <a href="index.html">Home</a> · <a href="https://github.com/jlaiii/hermes-browser-bridge">GitHub</a> · <a href="about.html">About</a></p>
   </div>
 </footer>
-
-<script>
-  document.querySelectorAll('.tab').forEach(function(tab){
-    tab.addEventListener('click', function(){
-      var target = this.getAttribute('data-target');
-      document.querySelectorAll('.tab').forEach(function(t){ t.classList.remove('active'); });
-      document.querySelectorAll('.platform-block').forEach(function(b){ b.classList.remove('active'); });
-      this.classList.add('active');
-      document.getElementById(target).classList.add('active');
-    });
-  });
-</script>
 
 </body>
 </html>

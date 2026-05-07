@@ -3,109 +3,140 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>About — hermes-browser-bridge</title>
+<title>About — Hermes Browser Bridge</title>
 <style>
-  *, *::before, *::after { box-sizing: border-box; }
-  body {
-    margin: 0;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    background: #0d1117;
-    color: #c9d1d9;
-    line-height: 1.6;
+  *,*::before,*::after{box-sizing:border-box;margin:0}
+  :root{
+    --bg:#050508;--surface:#0e0e12;--surface-2:#16161d;--border:#1e293b;
+    --text:#f8fafc;--text-2:#94a3b8;--accent:#3b82f6;--accent-2:#6366f1;--success:#22c55e;
   }
-  a { color: #58a6ff; text-decoration: none; }
-  a:hover { text-decoration: underline; }
-  .container { max-width: 960px; margin: 0 auto; padding: 0 24px; }
-  header {
-    border-bottom: 1px solid #30363d;
-    padding: 32px 0;
+  html{scroll-behavior:smooth}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);line-height:1.6;min-height:100vh;
   }
-  header .container { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
-  .brand { font-weight: 700; font-size: 1.25rem; color: #f0f6fc; }
-  nav a { margin-left: 20px; font-size: 0.95rem; }
-  section { padding: 60px 0; }
-  h1 { font-size: 2rem; margin: 0 0 16px; color: #f0f6fc; }
-  h2 { font-size: 1.35rem; margin: 32px 0 10px; color: #f0f6fc; }
-  p { max-width: 720px; margin: 0 0 14px; }
-  ul { padding-left: 20px; margin: 0 0 14px; }
-  li { margin-bottom: 6px; }
-  .card {
-    background: #161b22;
-    border: 1px solid #30363d;
-    border-radius: 12px;
-    padding: 24px;
-    margin: 18px 0;
+  a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
+  .container{max-width:1100px;margin:0 auto;padding:0 24px}
+  header{
+    position:fixed;top:0;left:0;right:0;z-index:100;
+    background:rgba(5,5,8,.7);backdrop-filter:blur(20px);border-bottom:1px solid var(--border);
   }
-  .card h3 { margin: 0 0 8px; font-size: 1.05rem; color: #f0f6fc; }
-  .card p { margin: 0; }
-  footer { text-align: center; padding: 40px 0 60px; color: #8b949e; font-size: 0.9rem; border-top: 1px solid #21262d; }
-  .tag { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 0.78rem; font-weight: 600; background: #21262d; color: #c9d1d9; border: 1px solid #30363d; margin-right: 6px; }
+  header .container{display:flex;align-items:center;padding:14px 0}
+  .logo{font-weight:800;font-size:1.15rem;letter-spacing:-.02em;color:var(--text);display:flex;align-items:center;gap:8px}
+  .logo svg{width:22px;height:22px;color:var(--accent)}
+  nav{display:flex;gap:28px;margin-left:auto;font-size:.92rem}
+  nav a{color:var(--text-2);font-weight:500;transition:color .2s}nav a:hover{color:var(--text);text-decoration:none}
+
+  .hero{padding:120px 0 60px;text-align:center}
+  h1{font-size:clamp(2rem,5vw,3rem);line-height:1.1;letter-spacing:-.03em;font-weight:800;margin:0 0 12px}
+  .lead{color:var(--text-2);max-width:560px;margin:0 auto}
+
+  .story{max-width:720px;margin:0 auto;padding:0 0 80px}
+  h2{font-size:1.35rem;margin:48px 0 14px;font-weight:700;letter-spacing:-.02em}
+  p{color:var(--text-2);font-size:.98rem;margin:0 0 14px;line-height:1.7}
+  ul{padding-left:20px;color:var(--text-2);font-size:.95rem;line-height:1.8;margin:0 0 14px}
+
+  .tag{display:inline-block;padding:4px 12px;border-radius:999px;font-size:.82rem;font-weight:600;
+    background:var(--surface-2);border:1px solid var(--border);color:var(--text);margin:4px 4px 4px 0;
+  }
+
+  .card-link{
+    display:block;background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:24px 28px;
+    margin:14px 0;text-decoration:none;color:var(--text);transition:transform .2s,border-color .2s,box-shadow .3s;
+  }
+  .card-link:hover{transform:translateY(-3px);border-color:var(--accent);box-shadow:0 10px 32px rgba(59,130,246,.12);text-decoration:none;color:var(--text)}
+  .card-link h3{font-size:1.05rem;margin:0 0 6px}
+  .card-link p{color:var(--text-2);font-size:.9rem;margin:0}
+
+  footer{text-align:center;padding:40px 0 60px;color:var(--text-2);font-size:.88rem;border-top:1px solid var(--border)}
+  footer a{color:var(--text-2)}footer a:hover{color:var(--text)}
+  .badge{display:inline-flex;gap:6px;padding:4px 10px;border-radius:999px;font-size:.72rem;font-weight:700;background:var(--success);color:#fff;vertical-align:middle;margin-right:6px}
+  @media(max-width:640px){nav{display:none}}
 </style>
 </head>
 <body>
 
 <header>
   <div class="container">
-    <div class="brand">hermes-browser-bridge</div>
+    <a href="index.html" class="logo">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="6 9 12 3 18 9"/><polyline points="6 15 12 21 18 15"/><line x1="12" y1="3" x2="12" y2="21"/>
+      </svg>
+      Hermes Browser Bridge
+    </a>
     <nav>
       <a href="index.html">Home</a>
       <a href="install.html">Install</a>
       <a href="about.html">About</a>
-      <a href="https://github.com/jlaiii/hermes-browser-bridge">GitHub</a>
+      <a href="https://github.com/jlaiii/hermes-browser-bridge" target="_blank" rel="noopener">GitHub</a>
     </nav>
   </div>
 </header>
 
-<section>
+<section class="hero">
   <div class="container">
     <h1>About</h1>
+    <p class="lead">
+      Hermes Browser Bridge bridges the gap between automation scripts and real live browser tabs.
+    </p>
+  </div>
+</section>
+
+<section class="story">
+  <div class="container">
+
+    <h2>Why It Exists</h2>
     <p>
-      <strong>hermes-browser-bridge</strong> is a lightweight, CSP-safe browser automation tool built
-      for the <strong>Hermes Agent</strong> ecosystem. It lets you remotely control live browser tabs
-      via a local relay server, using Tampermonkey's privileged <code>GM_xmlhttpRequest</code> to
-      bypass strict Content-Security-Policy rules on sites like GitHub, LinkedIn, ChatGPT, and eBay.
+      Browser automation is broken. Puppeteer and Playwright spin up heavy headless Chromium instances that miss the actual page state. WebSocket injection scripts fail on GitHub, LinkedIn, ChatGPT, and any site with strict Content-Security-Policy rules. Selenium feels like 2012.
+    </p>
+    <p>
+      Hermes Browser Bridge takes a different approach: inject a lightweight userscript through Tampermonkey, poll a local relay server over HTTP, and execute commands inside the real browser — the same tab you're looking at right now. No heavy headless browser. No CSP blocks. No flaky WebSocket reconnects.
+    </p>
+
+    <h2>How It's Different</h2>
+    <ul>
+      <li><strong>Real browser, real context.</strong> You are logged in. Cookies work. JavaScript frameworks render. No emulation gap.</li>
+      <li><strong>CSP bypass.</strong> Uses Tampermonkey's privileged <code>GM_xmlhttpRequest</code> and HTTP short-polling instead of WebSocket injection.</li>
+      <li><strong>Zero browser config.</strong> Install Tampermonkey, paste the script, done.</li>
+      <li><strong>Portable relay.</strong> Single-file Python aiohttp server. No Docker. No cloud dependency.</li>
+      <li><strong>Multi-tab.</strong> Each tab auto-registers as an independent client.</li>
+    </ul>
+
+    <h2>Stack</h2>
+    <p>
+      <span class="tag">Python 3</span>
+      <span class="tag">aiohttp</span>
+      <span class="tag">Tampermonkey</span>
+      <span class="tag">GM_xmlhttpRequest</span>
+      <span class="tag">Vanilla JS</span>
+      <span class="tag">GitHub Pages</span>
     </p>
 
     <h2>Who Built It</h2>
     <p>
-      Built by <a href="https://github.com/jlaiii">jlaiii</a> for the Hermes Agent project — an AI-powered
-      CLI automation environment running inside WSL.
+      Built by <a href="https://github.com/jlaiii">jlaiii</a> for the <strong>Hermes Agent</strong> ecosystem — an AI-powered CLI automation environment inside WSL.
     </p>
 
-    <h2>Why It Exists</h2>
-    <p>
-      Traditional browser automation tools (WebSocket injections, Puppeteer, Playwright) fail on
-      heavily CSP-protected sites. This bridge uses HTTP short-polling, so it works everywhere
-      Tampermonkey does.
-    </p>
-
-    <div class="card">
-      <h3>Live Site</h3>
-      <p><a href="https://jlaiii.github.io/hermes-browser-bridge/">https://jlaiii.github.io/hermes-browser-bridge/</a></p>
-    </div>
-
-    <div class="card">
-      <h3>Repository</h3>
-      <p><a href="https://github.com/jlaiii/hermes-browser-bridge">github.com/jlaiii/hermes-browser-bridge</a></p>
-    </div>
-
-    <h2>Stack</h2>
-    <p>
-      <span class="tag">Python</span>
-      <span class="tag">aiohttp</span>
-      <span class="tag">Tampermonkey</span>
-      <span class="tag">GM_xmlhttpRequest</span>
-      <span class="tag">GitHub Pages</span>
-    </p>
+    <h2>Links</h2>
+    <a href="https://jlaiii.github.io/hermes-browser-bridge/" class="card-link">
+      🌐 <strong>Live Site</strong> — <span style="color:var(--text)">https://jlaiii.github.io/hermes-browser-bridge/</span>
+    </a>
+    <a href="https://github.com/jlaiii/hermes-browser-bridge" class="card-link">
+      ⭐ <strong>GitHub Repository</strong> — <span style="color:var(--text)">https://github.com/jlaiii/hermes-browser-bridge</span>
+    </a>
+    <a href="install.html" class="card-link">
+      📦 <strong>Install Guide</strong> — Step-by-step for Linux, Mac, and Windows.
+    </a>
 
     <h2>License</h2>
-    <p>MIT — see <a href="https://github.com/jlaiii/hermes-browser-bridge/blob/master/LICENSE">LICENSE</a>.</p>
+    <p>MIT — free to use, fork, and modify. See the <a href="https://github.com/jlaiii/hermes-browser-bridge/blob/master/LICENSE">LICENSE</a> file in the repository.</p>
+
   </div>
 </section>
 
 <footer>
   <div class="container">
-    <p>hermes-browser-bridge — <a href="https://jlaiii.github.io/hermes-browser-bridge/">Live Site</a> — <a href="https://github.com/jlaiii/hermes-browser-bridge">GitHub</a></p>
+    <p><span class="badge">Open Source</span> Hermes Browser Bridge — <a href="index.html">Home</a> · <a href="install.html">Install</a> · <a href="https://github.com/jlaiii/hermes-browser-bridge">GitHub</a></p>
   </div>
 </footer>
 

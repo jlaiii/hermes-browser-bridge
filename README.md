@@ -1,8 +1,5 @@
 # Hermes Browser Bridge
-
 # Hermes Browser Bridge
-
-A **CSP-safe browser automation bridge** that lets you remotely control any website from a local relay server. Built for the **Hermes Agent** ecosystem.
 
 **[Live Site](https://jlaiii.github.io/hermes-browser-bridge/)**
 
