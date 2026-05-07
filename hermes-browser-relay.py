@@ -51,6 +51,11 @@ def new_client_id():
 async def http_poll(request):
     """Browser polls here every ~1.5s. Return command immediately if one exists."""
     cid = request.query.get("client_id")
+    bye = request.query.get("bye")
+    if bye and cid and cid in clients:
+        del clients[cid]
+        return web.json_response({"type": "bye", "client_id": cid})
+
     if not cid or cid not in clients:
         cid = new_client_id()
         clients[cid] = {"queue": [], "last_seen": time.time(), "url": None}
