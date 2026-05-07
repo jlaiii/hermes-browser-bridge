@@ -1,7 +1,14 @@
 #!/usr/bin/env python3
 """
-Hermes Browser Bridge Relay v2.0
+Hermes Browser Bridge Relay v2.0.1
 HTTP short-polling with proper command/response lifecycle.
+
+Changelog:
+  v2.0.1 — reduced NEW_CLIENT_THROTTLE_SEC from 5s to 3s
+  v2.0.0 — added stale client_id cleanup, found_existing flag, IP-based reuse on reload
+  v1.x   — initial relay
+
+"""
 
 Usage:
   cd /mnt/c/Users/jayst/Desktop
@@ -12,7 +19,7 @@ import asyncio, json, time, random, socket, subprocess
 from aiohttp import web
 
 PORT = 8765
-NEW_CLIENT_THROTTLE_SEC = 3  # Don't create new client from blank ID faster than every 3s per IP
+NEW_CLIENT_THROTTLE_SEC = 5  # Don't create new client from blank ID faster than every 5s per IP
 
 clients = {}       # client_id -> {"queue": [], "last_seen": ts, "url": str, "ip": str, "connected": bool}
 results = {}       # cmd_id -> response dict
@@ -65,22 +72,33 @@ async def http_poll(request):
             del clients[cid]
         return web.json_response({"type": "bye", "client_id": cid})
 
-    if not cid or cid not in clients:
-        # Throttle blank client creation from same IP
-        now = time.time()
-        last_blank = blank_cid_ips.get(ip, 0)
-        if now - last_blank < NEW_CLIENT_THROTTLE_SEC:
-            # Just pick the most recent client from this IP
+    found_existing = cid and cid in clients
+    if not cid:
+        # blank client_id: try to reuse existing client from same IP
+        for c in reversed(list(clients.keys())):
+            if clients[c].get("ip") == ip:
+                cid = c
+                found_existing = True
+                break
+
+    if not found_existing:
+        if cid and cid not in clients:
+            # stale client_id from page reload — attempt IP-based reuse
             for c in reversed(list(clients.keys())):
                 if clients[c].get("ip") == ip:
                     cid = c
+                    found_existing = True
                     break
-            else:
-                cid = None
-        if not cid:
-            cid = new_client_id()
-            blank_cid_ips[ip] = now
-            clients[cid] = {"queue": [], "last_seen": now, "url": None, "ip": ip, "connected": True}
+    
+    if not found_existing:
+        # create new client (throttled)
+        now = time.time()
+        last_blank = blank_cid_ips.get(ip, 0)
+        if now - last_blank < NEW_CLIENT_THROTTLE_SEC:
+            return web.json_response({"type": "noop", "client_id": "", "message": "throttled"})
+        cid = new_client_id()
+        blank_cid_ips[ip] = now
+        clients[cid] = {"queue": [], "last_seen": now, "url": None, "ip": ip, "connected": True}
     else:
         clients[cid]["connected"] = True
 
